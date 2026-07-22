@@ -145,7 +145,9 @@ function HotelCard({ hotel: h, isFirst, nights }: { hotel: HotelResult; isFirst:
             {Array.from({ length: h.stars || 0 }).map((_, i) => (
               <Star key={i} className="w-3 h-3 text-amber-400 fill-amber-400" />
             ))}
-            <span className="text-xs text-[#8892b0] ml-1">{h.area}</span>
+            {h.area && h.area !== "null" && (
+              <span className="text-xs text-[#8892b0] ml-1">{h.area}</span>
+            )}
           </div>
         </div>
         {isFirst && (

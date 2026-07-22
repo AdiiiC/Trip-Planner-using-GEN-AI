@@ -224,7 +224,7 @@ function AttractionCard({ attraction: a }: { attraction: Attraction }) {
       <p className="text-[#8892b0] text-xs leading-relaxed flex-1">{a.description}</p>
 
       <div className="space-y-1.5">
-        {a.location && (
+        {a.location && a.location !== "null" && (
           <div className="flex items-center gap-1.5 text-xs text-[#8892b0]">
             <MapPin className="w-3 h-3 shrink-0" /> {a.location}
           </div>
@@ -277,7 +277,7 @@ function NearbyCard({ place: p }: { place: NearbyPlace }) {
         <div className="flex items-center gap-1 text-emerald-300">
           <Ticket className="w-3 h-3" /> {p.entry_cost}
         </div>
-        {p.how_to_get && (
+        {p.how_to_get && p.how_to_get !== "null" && (
           <span className="text-[#8892b0]">{p.how_to_get}</span>
         )}
       </div>

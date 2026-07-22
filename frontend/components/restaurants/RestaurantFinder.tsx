@@ -96,8 +96,19 @@ export function RestaurantFinder() {
   );
 }
 
+// Guard against LLM returning the literal string "null"
+function val(v: string | null | undefined): string | null {
+  if (!v || v === "null" || v === "undefined" || v.trim() === "") return null;
+  return v;
+}
+
 function RestaurantCard({ restaurant: r }: { restaurant: Restaurant }) {
   const tierClass = TIER_COLORS[r.price_tier] ?? "bg-white/10 text-white/70 border-white/10";
+  const area    = val(r.area);
+  const hours   = val(r.hours);
+  const rating  = val(r.rating);
+  const tips    = val(r.tips);
+  const mustTry = (r.must_try ?? []).filter(d => val(d));
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -107,7 +118,9 @@ function RestaurantCard({ restaurant: r }: { restaurant: Restaurant }) {
       <div className="flex items-start justify-between gap-2">
         <div>
           <h4 className="text-white font-semibold">{r.name}</h4>
-          <p className="text-xs text-[#8892b0]">{r.cuisine} · {r.area}</p>
+          <p className="text-xs text-[#8892b0]">
+            {r.cuisine}{area ? ` · ${area}` : ""}
+          </p>
         </div>
         <span className={cn("shrink-0 text-[10px] font-medium rounded-full border px-2 py-0.5", tierClass)}>
           {r.price_tier}
@@ -118,23 +131,23 @@ function RestaurantCard({ restaurant: r }: { restaurant: Restaurant }) {
         <div className="flex items-center gap-1.5 text-xs">
           <span className="text-emerald-400 font-medium">{r.price_range}</span>
         </div>
-        {r.rating && (
+        {rating && (
           <div className="flex items-center gap-1 text-xs text-[#8892b0]">
-            <Star className="w-3 h-3 text-amber-400 fill-amber-400" /> {r.rating}
+            <Star className="w-3 h-3 text-amber-400 fill-amber-400" /> {rating}
           </div>
         )}
-        {r.hours && (
+        {hours && (
           <div className="flex items-center gap-1 text-xs text-[#8892b0]">
-            <Clock className="w-3 h-3" /> {r.hours}
+            <Clock className="w-3 h-3" /> {hours}
           </div>
         )}
       </div>
 
-      {r.must_try?.length > 0 && (
+      {mustTry.length > 0 && (
         <div>
           <p className="text-xs text-[#8892b0] mb-1">Must try:</p>
           <div className="flex flex-wrap gap-1">
-            {r.must_try.map((d, i) => (
+            {mustTry.map((d, i) => (
               <span key={i} className="text-[10px] bg-amber-500/10 border border-amber-500/20 text-amber-300 rounded-full px-2 py-0.5">
                 {d}
               </span>
@@ -143,9 +156,9 @@ function RestaurantCard({ restaurant: r }: { restaurant: Restaurant }) {
         </div>
       )}
 
-      {r.tips && (
+      {tips && (
         <div className="flex items-start gap-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-lg p-2 text-xs text-indigo-300">
-          <Lightbulb className="w-3 h-3 shrink-0 mt-0.5" /> {r.tips}
+          <Lightbulb className="w-3 h-3 shrink-0 mt-0.5" /> {tips}
         </div>
       )}
     </motion.div>
