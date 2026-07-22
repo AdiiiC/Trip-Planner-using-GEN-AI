@@ -35,19 +35,11 @@ from agents.weather import WeatherInput, get_weather
 
 app = FastAPI(title="Trip Planner API", version="2.0.0")
 
-# CORS: combine local dev origins with any production origins from env
-_cors_origins: list[str] = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
-_extra = os.getenv("ALLOWED_ORIGINS", "")  # comma-separated list
-if _extra:
-    _cors_origins += [o.strip() for o in _extra.split(",") if o.strip()]
-
+# Allow all origins — public API, no auth required
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=_cors_origins,
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

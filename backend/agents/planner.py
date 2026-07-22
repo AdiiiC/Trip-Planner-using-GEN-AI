@@ -173,7 +173,7 @@ _multi_prompt = ChatPromptTemplate.from_messages([
      "- Travel style: {travel_style}\n"
      "- Dietary preferences: {dietary}\n"
      "- Show costs in {currency} and local currency.\n\n"
-     "For each city create `## City N: {city} (N days)` sections, "
+     "For each city create `## City N: {{city}} (N days)` sections, "
      "then day-by-day sub-sections `### Day X – Theme`. "
      "At the end add a `## Inter-City Travel` section with transit options and estimated costs "
      "between each pair of cities."),
