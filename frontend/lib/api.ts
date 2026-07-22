@@ -20,7 +20,11 @@ import type {
   WeatherResult,
 } from "./types";
 
-const BASE = "http://localhost:8000";
+const BASE =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (typeof window !== "undefined" && window.location.hostname !== "localhost"
+    ? ""        // same-origin fallback when self-hosted
+    : "http://localhost:8000");
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
