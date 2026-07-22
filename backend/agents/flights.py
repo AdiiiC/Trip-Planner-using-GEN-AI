@@ -28,17 +28,18 @@ _SCHEMA = """{
     {
       "airline": "string",
       "flight_number": "string or null",
-      "departure": "HH:MM",
-      "arrival": "HH:MM",
-      "duration": "e.g. 3h 20m",
+      "departure": "HH:MM or null",
+      "arrival": "HH:MM or null",
+      "duration": "e.g. 3h 20m or null",
       "stops": "Direct / 1 stop",
       "price_inr": 0,
+      "is_estimate": true,
       "baggage": "check-in included / hand baggage only",
       "source": "Skyscanner"
     }
   ],
   "cheapest_inr": 0,
-  "note": "Prices are indicative; verify live on skyscanner.co.in"
+  "note": "Prices are indicative estimates from web search; verify live on skyscanner.co.in"
 }"""
 
 _structuring_prompt = ChatPromptTemplate.from_messages([
@@ -46,10 +47,13 @@ _structuring_prompt = ChatPromptTemplate.from_messages([
      "You are a flight-price extraction agent. Parse search data and return ONLY valid JSON — "
      "no markdown fences, no commentary. Schema:\n" + _SCHEMA.replace("{", "{{").replace("}", "}}") + "\n"
      "Rules:\n"
-     "• Only include flights that have OR likely include check-in baggage (not hand-baggage-only fares).\n"
-     "• Rank results cheapest first.\n"
-     "• If exact prices are unavailable, give realistic INR estimates based on your knowledge "
-     "  and label the note accordingly.\n"
+     "• Return EXACTLY 3 results: cheapest, a mid-range option, and a premium option — all with check-in baggage.\n"
+     "• Order results cheapest first (lowest price_inr first).\n"
+     "• Set is_estimate=true on ALL results — prices come from web search, not a live booking API.\n"
+     "• departure/arrival/duration: include if clearly stated in search data; set null if not found.\n"
+     "• If fewer than 3 distinct fares found in search data, use your knowledge of airlines\n"
+     "  on this route to fill remaining slots with realistic price ranges (is_estimate=true).\n"
+     "• Only include fares that include check-in baggage.\n"
      "• flight_number may be null if not found."),
     ("human",
      "Search params:\n"

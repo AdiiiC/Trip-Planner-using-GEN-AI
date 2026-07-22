@@ -161,7 +161,7 @@ export function FlightTracker() {
             {result.results?.length > 0 ? (
               <div className="space-y-3">
                 {result.results.map((f, i) => (
-                  <FlightCard key={i} flight={f} isFirst={i === 0} />
+                  <FlightCard key={i} flight={f} isFirst={i === 0} rank={i} />
                 ))}
               </div>
             ) : (
@@ -208,7 +208,11 @@ export function FlightTracker() {
   );
 }
 
-function FlightCard({ flight: f, isFirst }: { flight: FlightResult; isFirst: boolean }) {
+function FlightCard({ flight: f, isFirst, rank }: { flight: FlightResult; isFirst: boolean; rank: number }) {
+  const hasTimings = f.departure && f.departure !== "null" && f.arrival && f.arrival !== "null";
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const isEstimate = (f as any).is_estimate !== false;
+
   return (
     <motion.div
       initial={{ opacity: 0, x: -10 }}
@@ -219,43 +223,80 @@ function FlightCard({ flight: f, isFirst }: { flight: FlightResult; isFirst: boo
       )}
     >
       <div className="flex items-center justify-between gap-4 flex-wrap">
-        {/* Airline + number */}
-        <div className="min-w-[120px]">
+        {/* Airline + badges */}
+        <div className="min-w-[120px] space-y-1">
           <p className="text-white font-semibold">{f.airline}</p>
-          {f.flight_number && <p className="text-xs text-[#8892b0]">{f.flight_number}</p>}
-          {isFirst && (
-            <span className="text-[10px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full px-2 py-0.5 mt-1 inline-block">
-              Cheapest
-            </span>
+          {f.flight_number && f.flight_number !== "null" && (
+            <p className="text-xs text-[#8892b0]">{f.flight_number}</p>
           )}
+          <div className="flex flex-wrap gap-1">
+            {isFirst && (
+              <span className="text-[10px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full px-2 py-0.5">
+                Cheapest
+              </span>
+            )}
+            {rank === 1 && !isFirst && (
+              <span className="text-[10px] font-medium bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-full px-2 py-0.5">
+                Mid-range
+              </span>
+            )}
+            {rank === 2 && (
+              <span className="text-[10px] font-medium bg-slate-500/20 text-slate-300 border border-slate-500/30 rounded-full px-2 py-0.5">
+                Premium
+              </span>
+            )}
+            {isEstimate && (
+              <span className="text-[10px] font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20 rounded-full px-2 py-0.5">
+                Estimate
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Times + route */}
-        <div className="flex items-center gap-3 flex-1 justify-center min-w-[200px]">
-          <div className="text-center">
-            <p className="text-white font-bold text-lg">{f.departure || "—"}</p>
-            <p className="text-xs text-[#8892b0]">Depart</p>
-          </div>
-          <div className="flex-1 flex flex-col items-center gap-0.5">
-            <div className="flex items-center gap-1 text-xs text-[#8892b0]">
-              <Clock className="w-3 h-3" /> {f.duration}
+        <div className="flex items-center gap-3 flex-1 justify-center min-w-[180px]">
+          {hasTimings ? (
+            <>
+              <div className="text-center">
+                <p className="text-white font-bold text-lg">{f.departure}</p>
+                <p className="text-xs text-[#8892b0]">Depart</p>
+              </div>
+              <div className="flex-1 flex flex-col items-center gap-0.5">
+                {f.duration && f.duration !== "null" && (
+                  <div className="flex items-center gap-1 text-xs text-[#8892b0]">
+                    <Clock className="w-3 h-3" /> {f.duration}
+                  </div>
+                )}
+                <div className="flex items-center w-full">
+                  <div className="flex-1 border-t border-dashed border-[#1e2540]" />
+                  <ArrowRight className="w-3 h-3 text-[#8892b0] mx-1" />
+                </div>
+                <p className="text-[10px] text-[#8892b0]">{f.stops}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-white font-bold text-lg">{f.arrival}</p>
+                <p className="text-xs text-[#8892b0]">Arrive</p>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center gap-3">
+              {f.duration && f.duration !== "null" && (
+                <span className="flex items-center gap-1 text-xs text-[#8892b0]">
+                  <Clock className="w-3 h-3" /> {f.duration}
+                </span>
+              )}
+              <span className="text-xs text-[#8892b0]">{f.stops}</span>
+              <span className="text-[10px] text-[#8892b0]/50 border border-white/10 rounded px-1.5 py-0.5">
+                Timings: verify on Skyscanner
+              </span>
             </div>
-            <div className="flex items-center w-full">
-              <div className="flex-1 border-t border-dashed border-[#1e2540]" />
-              <ArrowRight className="w-3 h-3 text-[#8892b0] mx-1" />
-            </div>
-            <p className="text-[10px] text-[#8892b0]">{f.stops}</p>
-          </div>
-          <div className="text-center">
-            <p className="text-white font-bold text-lg">{f.arrival || "—"}</p>
-            <p className="text-xs text-[#8892b0]">Arrive</p>
-          </div>
+          )}
         </div>
 
         {/* Baggage */}
         <div className="flex items-center gap-1 text-xs">
-          <Luggage className={cn("w-3.5 h-3.5", f.baggage.includes("included") ? "text-emerald-400" : "text-amber-400")} />
-          <span className={f.baggage.includes("included") ? "text-emerald-300" : "text-amber-300"}>
+          <Luggage className={cn("w-3.5 h-3.5", f.baggage?.includes("included") ? "text-emerald-400" : "text-amber-400")} />
+          <span className={f.baggage?.includes("included") ? "text-emerald-300" : "text-amber-300"}>
             {f.baggage}
           </span>
         </div>
