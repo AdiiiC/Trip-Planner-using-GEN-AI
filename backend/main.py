@@ -104,26 +104,97 @@ async def sightseeing_endpoint(body: SightseeingInput):
 @app.get("/api/forex")
 async def forex_endpoint(base: str = "INR"):
     """
-    Fetch live exchange rates from ExchangeRate-API (free tier, no key required for basic).
-    Returns rates relative to the base currency.
+    Returns live forex rates (INR base).
+    Primary source: orientexchange.in (scraped concurrently per-currency page).
+    Fallback: exchangerate-api.com.
+
+    Response format: rates[currency] = how many INR buys 1 unit of that currency
+    e.g. rates["USD"] = 96.64  →  1 USD = ₹96.64
+    Note: this is INR-per-unit (NOT units-per-INR) — the frontend uses it directly.
     """
-    url = f"https://api.exchangerate-api.com/v4/latest/{base}"
+    rates = await _scrape_orient_rates()
+    if rates:
+        return {"base": "INR", "rates": rates, "provider": "orientexchange.in"}
+
+    # ── Fallback: exchangerate-api.com (returns units-per-INR, so we invert) ──
+    fallback_url = "https://api.exchangerate-api.com/v4/latest/INR"
     try:
         async with httpx.AsyncClient(timeout=8) as client:
-            resp = await client.get(url)
+            resp = await client.get(fallback_url)
             resp.raise_for_status()
             data = resp.json()
-            rates = data.get("rates", {})
-            # Return a curated subset of common currencies
+            raw = data.get("rates", {})
             wanted = ["USD", "EUR", "GBP", "JPY", "THB", "VND", "MYR",
                       "SGD", "IDR", "AED", "AUD", "CAD", "CNY", "KRW"]
-            return {
-                "base": base,
-                "rates": {k: rates[k] for k in wanted if k in rates},
-                "provider": "exchangerate-api.com",
+            # ExchangeRate-API gives 1 INR = X foreign, so invert to get INR per unit
+            rates_inverted = {
+                k: round(1 / raw[k], 6) for k in wanted if k in raw and raw[k]
             }
+            return {"base": "INR", "rates": rates_inverted, "provider": "exchangerate-api.com"}
     except Exception as exc:
         raise HTTPException(status_code=503, detail=f"Forex API unavailable: {exc}")
+
+
+# ── orientexchange.in scraper ─────────────────────────────────────────────────
+
+_ORIENT_SLUGS: dict[str, str] = {
+    "USD": "inr-usd",
+    "EUR": "inr-eur",
+    "GBP": "inr-gbp",
+    "JPY": "inr-jpy",
+    "SGD": "inr-sgd",
+    "AUD": "inr-aud",
+    "AED": "inr-aed",
+    "CAD": "inr-cad",
+    "THB": "inr-thb",
+    "MYR": "inr-myr",
+    "IDR": "inr-idr",
+    "VND": "inr-vnd",
+}
+
+_ORIENT_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/124.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-IN,en;q=0.9",
+}
+
+async def _fetch_orient_one(client: httpx.AsyncClient, currency: str, slug: str) -> tuple[str, float] | None:
+    """Fetch a single currency page and extract its INR rate."""
+    import re as _re
+    url = f"https://www.orientexchange.in/{slug}"
+    try:
+        resp = await client.get(url, headers=_ORIENT_HEADERS, follow_redirects=True, timeout=7)
+        # The page contains text like:  1 VND = 0.00386 INR
+        match = _re.search(
+            rf'1\s+{_re.escape(currency)}\s*=\s*([\d.]+)\s*INR',
+            resp.text, _re.IGNORECASE
+        )
+        if match:
+            return currency, float(match.group(1))
+    except Exception:
+        pass
+    return None
+
+
+async def _scrape_orient_rates() -> dict[str, float] | None:
+    """Scrape all currency pages concurrently. Returns dict of {currency: INR_rate}."""
+    import asyncio
+    async with httpx.AsyncClient() as client:
+        results = await asyncio.gather(
+            *[_fetch_orient_one(client, cur, slug) for cur, slug in _ORIENT_SLUGS.items()],
+            return_exceptions=True,
+        )
+    rates: dict[str, float] = {}
+    for r in results:
+        if isinstance(r, tuple) and r:
+            cur, rate = r
+            rates[cur] = rate
+    # Need at least 6 successful scrapes to be useful
+    return rates if len(rates) >= 6 else None
 
 
 # ── New feature endpoints ─────────────────────────────────────────────────────

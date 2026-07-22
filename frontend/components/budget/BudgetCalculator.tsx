@@ -158,13 +158,14 @@ export function BudgetCalculator() {
     }
   }, []);
 
-  // Fill live forex rates
+  // Fill live forex rates from orientexchange.in (via /api/forex)
+  // forexRates["USD"] = 96.64 already means "1 USD = ₹96.64" — use directly
   const fillLiveRates = useCallback(() => {
     if (!forexRates) return;
     const fields = watch("exchange_rates");
     fields.forEach((f, i) => {
       const live = forexRates[f.currency];
-      if (live) setValue(`exchange_rates.${i}.rate_to_inr`, parseFloat((1 / live).toFixed(5)));
+      if (live) setValue(`exchange_rates.${i}.rate_to_inr`, live);
     });
   }, [forexRates, watch, setValue]);
 
@@ -201,7 +202,7 @@ export function BudgetCalculator() {
                 <button type="button" onClick={fillLiveRates} disabled={loadingForex}
                   className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-500/30 rounded-lg px-2 py-1 transition-colors">
                   <RefreshCw className={cn("w-3 h-3", loadingForex && "animate-spin")} />
-                  Fill live rates
+                  {loadingForex ? "Fetching…" : "Fill from Orient Exchange"}
                 </button>
               </div>
               <div className="grid sm:grid-cols-2 gap-2">
@@ -229,6 +230,14 @@ export function BudgetCalculator() {
                 className="mt-2 flex items-center gap-1 text-indigo-400 text-sm hover:text-indigo-300">
                 <PlusCircle className="w-4 h-4" /> Add currency
               </button>
+              <p className="text-[10px] text-[#8892b0]/60 mt-2">
+                Rates sourced from{" "}
+                <a href="https://www.orientexchange.in" target="_blank" rel="noopener noreferrer"
+                  className="text-indigo-400/70 hover:text-indigo-400 underline underline-offset-2">
+                  orientexchange.in
+                </a>
+                {" "}· updated on page load
+              </p>
             </SectionCard>
 
             {/* Flights */}
