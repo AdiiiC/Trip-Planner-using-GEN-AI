@@ -1,0 +1,118 @@
+from __future__ import annotations
+
+import json
+import re
+
+from pydantic import BaseModel
+from langchain_groq import ChatGroq
+from langchain_core.prompts import ChatPromptTemplate
+
+
+class SightseeingInput(BaseModel):
+    city: str
+    country: str = ""
+
+
+async def explore_sightseeing(inp: SightseeingInput) -> dict:
+    location = f"{inp.city}, {inp.country}".strip(", ")
+    llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-versatile", max_retries=3, timeout=60)
+
+    # Try Tavily search first; fall back to LLM knowledge if unavailable
+    attractions_text = ""
+    nearby_text = ""
+    sources: list[str] = []
+
+    try:
+        from langchain_community.tools.tavily_search import TavilySearchResults
+
+        search = TavilySearchResults(max_results=5)
+
+        att_results = await search.ainvoke(
+            f"{location} top tourist attractions entry fee ticket price 2025"
+        )
+        nb_results = await search.ainvoke(
+            f"day trips near {location} within 2 hours places worth visiting entry fee"
+        )
+
+        attractions_text = "\n".join(
+            r.get("content", "") for r in att_results if isinstance(r, dict)
+        )
+        nearby_text = "\n".join(
+            r.get("content", "") for r in nb_results if isinstance(r, dict)
+        )
+        sources = [
+            r.get("url", "")
+            for r in (att_results + nb_results)
+            if isinstance(r, dict) and r.get("url")
+        ][:6]
+
+    except Exception:
+        # Tavily not configured – rely on LLM knowledge
+        attractions_text = f"Use your trained knowledge about {location}."
+        nearby_text = f"Use your trained knowledge about places near {location}."
+
+    structuring_prompt = ChatPromptTemplate.from_messages([
+        ("system",
+         "You are a travel data analyst. Extract structured tourist data and return ONLY valid JSON — "
+         "no markdown fences, no extra text. Use this exact schema:\n"
+         "{{\n"
+         '  "attractions": [\n'
+         "    {{\n"
+         '      "name": "string",\n'
+         '      "description": "1–2 sentences",\n'
+         '      "category": "heritage|nature|food|adventure|culture|beach|museum|theme-park|religious",\n'
+         '      "entry_cost": "Free / e.g. 150,000 VND / ₹500",\n'
+         '      "entry_cost_usd": 0.0,\n'
+         '      "time_needed": "e.g. 1–2 hours",\n'
+         '      "location": "district or area",\n'
+         '      "tips": "one practical tip"\n'
+         "    }}\n"
+         "  ],\n"
+         '  "nearby_places": [\n'
+         "    {{\n"
+         '      "name": "string",\n'
+         '      "distance_km": "e.g. 30 km",\n'
+         '      "travel_time": "e.g. 45 minutes",\n'
+         '      "highlights": "2–3 highlights",\n'
+         '      "entry_cost": "Free / price",\n'
+         '      "how_to_get": "bus / taxi / train"\n'
+         "    }}\n"
+         "  ]\n"
+         "}}\n"
+         "Include 8–12 main attractions and 4–6 nearby places. "
+         "If entry cost is unknown write 'Check locally'."),
+        ("human",
+         "City: {city}\n\n"
+         "Attractions search data:\n{att}\n\n"
+         "Nearby places search data:\n{nb}\n\n"
+         "Return only the JSON object."),
+    ])
+
+    response = llm.invoke(
+        structuring_prompt.format_messages(
+            city=location,
+            att=attractions_text[:3500],
+            nb=nearby_text[:2500],
+        )
+    )
+
+    raw = response.content.strip()
+    # Strip any accidental markdown fences
+    raw = re.sub(r"```[a-z]*\n?", "", raw).strip()
+
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        # Attempt to extract JSON object substring
+        match = re.search(r"\{.*\}", raw, re.DOTALL)
+        try:
+            data = json.loads(match.group()) if match else {}
+        except Exception:
+            data = {}
+
+    return {
+        "city": location,
+        "attractions": data.get("attractions", []),
+        "nearby_places": data.get("nearby_places", []),
+        "sources": sources,
+    }

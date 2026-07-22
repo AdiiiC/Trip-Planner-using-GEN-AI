@@ -1,0 +1,130 @@
+"""
+Flight price tracker — targets Skyscanner.co.in via Tavily web search.
+Filters: one-way · check-in baggage included.
+"""
+from __future__ import annotations
+
+import json
+import re
+
+from pydantic import BaseModel
+from langchain_groq import ChatGroq
+from langchain_core.prompts import ChatPromptTemplate
+
+
+class FlightSearchInput(BaseModel):
+    origin: str        # "Bengaluru" / "BLR"
+    destination: str   # "Ho Chi Minh City" / "SGN"
+    date: str          # "YYYY-MM-DD"
+    passengers: int = 1
+
+
+_SCHEMA = """{
+  "route": "Origin → Destination",
+  "date": "YYYY-MM-DD",
+  "type": "one-way",
+  "baggage_filter": "check-in baggage included",
+  "results": [
+    {
+      "airline": "string",
+      "flight_number": "string or null",
+      "departure": "HH:MM",
+      "arrival": "HH:MM",
+      "duration": "e.g. 3h 20m",
+      "stops": "Direct / 1 stop",
+      "price_inr": 0,
+      "baggage": "check-in included / hand baggage only",
+      "source": "Skyscanner"
+    }
+  ],
+  "cheapest_inr": 0,
+  "note": "Prices are indicative; verify live on skyscanner.co.in"
+}"""
+
+_structuring_prompt = ChatPromptTemplate.from_messages([
+    ("system",
+     "You are a flight-price extraction agent. Parse search data and return ONLY valid JSON — "
+     "no markdown fences, no commentary. Schema:\n" + _SCHEMA.replace("{", "{{").replace("}", "}}") + "\n"
+     "Rules:\n"
+     "• Only include flights that have OR likely include check-in baggage (not hand-baggage-only fares).\n"
+     "• Rank results cheapest first.\n"
+     "• If exact prices are unavailable, give realistic INR estimates based on your knowledge "
+     "  and label the note accordingly.\n"
+     "• flight_number may be null if not found."),
+    ("human",
+     "Search params:\n"
+     "  Route: {origin} → {destination}\n"
+     "  Date: {date}\n"
+     "  Passengers: {passengers}\n"
+     "  Type: one-way\n"
+     "  Baggage filter: check-in baggage included\n\n"
+     "Web search data from Skyscanner.co.in:\n{text}\n\n"
+     "Return only the JSON object."),
+])
+
+
+async def search_flights(inp: FlightSearchInput) -> dict:
+    raw_text = ""
+    sources: list[str] = []
+
+    try:
+        from langchain_community.tools.tavily_search import TavilySearchResults
+
+        # Primary: target Skyscanner.co.in + skyscanner.net
+        sky_search = TavilySearchResults(
+            max_results=5,
+            include_domains=["skyscanner.co.in", "skyscanner.net"],
+        )
+        q1 = (
+            f"one way flight {inp.origin} to {inp.destination} "
+            f"{inp.date} {inp.passengers} passenger check-in baggage price INR"
+        )
+        r1 = await sky_search.ainvoke(q1)
+
+        # Supplementary: broader search to fill gaps
+        broad_search = TavilySearchResults(max_results=4)
+        q2 = (
+            f"skyscanner.co.in {inp.origin} {inp.destination} one way "
+            f"check-in baggage included INR {inp.date}"
+        )
+        r2 = await broad_search.ainvoke(q2)
+
+        all_results = list(r1 or []) + list(r2 or [])
+        raw_text = "\n\n".join(
+            r.get("content", "") for r in all_results if isinstance(r, dict)
+        )[:4500]
+        sources = [
+            r.get("url", "")
+            for r in all_results
+            if isinstance(r, dict) and r.get("url")
+        ][:6]
+
+    except Exception:
+        raw_text = (
+            "Tavily search unavailable. "
+            "Use your trained knowledge of typical flight prices for this route."
+        )
+
+    llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-versatile", max_retries=3, timeout=60)
+    response = llm.invoke(
+        _structuring_prompt.format_messages(
+            origin=inp.origin,
+            destination=inp.destination,
+            date=inp.date,
+            passengers=inp.passengers,
+            text=raw_text,
+        )
+    )
+
+    raw = re.sub(r"```[a-z]*\n?", "", response.content.strip()).strip()
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        m = re.search(r"\{.*\}", raw, re.DOTALL)
+        try:
+            data = json.loads(m.group()) if m else {}
+        except Exception:
+            data = {"results": [], "note": "Could not parse flight data."}
+
+    data["sources"] = sources
+    return data
