@@ -17,14 +17,14 @@ export default function VisaPage() {
         <p className="text-xs font-semibold text-[#8892b0] uppercase tracking-wider mb-3">Visa types</p>
         <div className="grid sm:grid-cols-2 gap-2 text-xs">
           {[
-            { emoji: "🟢", type: "Visa Free",              desc: "No visa needed (e.g., Nepal, Bhutan, Maldives)" },
-            { emoji: "🟢", type: "Arrival Card Required",  desc: "Free entry but fill digital card (e.g., Thailand TDAC)" },
-            { emoji: "🔵", type: "e-Visa",                 desc: "Apply & pay online before travel (e.g., Vietnam, Turkey)" },
-            { emoji: "🟡", type: "Visa on Arrival",        desc: "Pay at airport/port (e.g., Indonesia, Cambodia)" },
-            { emoji: "🔴", type: "Consulate / Embassy",    desc: "Apply in person before travel (e.g., USA, UK, Schengen)" },
+            { color: "bg-emerald-500", type: "Visa Free",             desc: "No visa needed (e.g., Nepal, Bhutan, Maldives)" },
+            { color: "bg-teal-500",    type: "Arrival Card Required", desc: "Free entry but fill digital card (e.g., Thailand TDAC)" },
+            { color: "bg-sky-500",     type: "e-Visa",                desc: "Apply & pay online before travel (e.g., Vietnam, Turkey)" },
+            { color: "bg-amber-500",   type: "Visa on Arrival",       desc: "Pay at airport/port (e.g., Indonesia, Cambodia)" },
+            { color: "bg-rose-500",    type: "Consulate / Embassy",   desc: "Apply in person before travel (e.g., USA, UK, Schengen)" },
           ].map(r => (
             <div key={r.type} className="flex items-start gap-2">
-              <span>{r.emoji}</span>
+              <span className={`mt-0.5 shrink-0 w-2 h-2 rounded-full ${r.color}`} />
               <div>
                 <span className="font-medium text-white">{r.type}</span>
                 <span className="text-[#8892b0] ml-1">— {r.desc}</span>

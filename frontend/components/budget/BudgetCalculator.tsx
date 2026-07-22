@@ -184,7 +184,7 @@ export function BudgetCalculator() {
           <div className="space-y-4">
 
             {/* Travelers */}
-            <SectionCard title="👥 Travelers">
+            <SectionCard title="Travelers">
               <Field>
                 <Label>Number of travelers</Label>
                 <input type="number" min={1} max={50} className="input-dark w-32"
@@ -193,7 +193,7 @@ export function BudgetCalculator() {
             </SectionCard>
 
             {/* Exchange Rates */}
-            <SectionCard title="💱 Exchange Rates (→ INR)">
+            <SectionCard title="Exchange Rates (→ INR)">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs text-[#8892b0]">
                   Enter how many INR = 1 unit of each currency
@@ -232,7 +232,7 @@ export function BudgetCalculator() {
             </SectionCard>
 
             {/* Flights */}
-            <SectionCard title="✈️ Flights (per person in INR)">
+            <SectionCard title="Flights (per person in INR)">
               <div className="space-y-2">
                 {flights.fields.map((f, i) => (
                   <div key={f.id} className="flex gap-2 items-end">
@@ -258,7 +258,7 @@ export function BudgetCalculator() {
             </SectionCard>
 
             {/* Accommodation */}
-            <SectionCard title="🏨 Accommodation">
+            <SectionCard title="Accommodation">
               <p className="text-xs text-[#8892b0] flex items-center gap-1 mb-2">
                 <Info className="w-3 h-3" /> Total booking price; choose split type
               </p>
@@ -346,7 +346,7 @@ export function BudgetCalculator() {
             </SectionCard>
 
             {/* Sightseeing */}
-            <SectionCard title="🎡 Sightseeing & Attractions">
+            <SectionCard title="Sightseeing & Attractions">
               <div className="space-y-2">
                 {sight.fields.map((f, i) => (
                   <div key={f.id} className="flex gap-2 items-end flex-wrap">
@@ -378,7 +378,7 @@ export function BudgetCalculator() {
             </SectionCard>
 
             {/* Extras */}
-            <SectionCard title="📦 Extras (SIM, Visa, Insurance…)" defaultOpen={false}>
+            <SectionCard title="Extras (SIM, Visa, Insurance…)" defaultOpen={false}>
               <div className="space-y-2">
                 {xtra.fields.map((f, i) => (
                   <div key={f.id} className="flex gap-2 items-end flex-wrap">
@@ -410,7 +410,7 @@ export function BudgetCalculator() {
             </SectionCard>
 
             {/* Cash Setup */}
-            <SectionCard title="💰 Pocket Money & Cash Setup">
+            <SectionCard title="Pocket Money & Cash Setup">
               <div className="grid sm:grid-cols-2 gap-4 mb-4">
                 <Field>
                   <Label>Total pocket money (USD)</Label>
@@ -538,25 +538,25 @@ function BudgetResults({ result }: { result: BudgetResult }) {
       {/* Fixed costs */}
       <div className="glass rounded-2xl p-4 space-y-3">
         <p className="text-sm font-medium text-white">1. Fixed Costs</p>
-        <ResultSection label="✈️ Flights" total={fc.flights.total_inr}>
+        <ResultSection label="Flights" total={fc.flights.total_inr}>
           {fc.flights.items.map((f, i) => (
             <Row key={i} label={f.route} value={formatINR(f.amount_inr)} />
           ))}
         </ResultSection>
-        <ResultSection label="🏨 Stays" total={fc.stays.total_inr}>
+        <ResultSection label="Stays" total={fc.stays.total_inr}>
           {fc.stays.items.map((s, i) => (
             <Row key={i} label={`${s.destination} (${s.split})`} value={formatINR(s.per_person_inr)} />
           ))}
         </ResultSection>
         {fc.sightseeing.total_inr > 0 && (
-          <ResultSection label="🎡 Sightseeing" total={fc.sightseeing.total_inr}>
+          <ResultSection label="Sightseeing" total={fc.sightseeing.total_inr}>
             {fc.sightseeing.items.map((s, i) => (
               <Row key={i} label={`${s.name} (${s.original})`} value={formatINR(s.amount_inr)} />
             ))}
           </ResultSection>
         )}
         {fc.extras.total_inr > 0 && (
-          <ResultSection label="📦 Extras" total={fc.extras.total_inr}>
+          <ResultSection label="Extras" total={fc.extras.total_inr}>
             {fc.extras.items.map((e, i) => (
               <Row key={i} label={`${e.name} (${e.original})`} value={formatINR(e.amount_inr)} />
             ))}

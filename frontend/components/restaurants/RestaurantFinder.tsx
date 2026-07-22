@@ -49,9 +49,9 @@ export function RestaurantFinder() {
             <label className="text-xs font-medium text-[#8892b0] mb-1 block">Budget tier</label>
             <select value={budget} onChange={e => setBudget(e.target.value)} className="input-dark">
               <option value="any">Any</option>
-              <option value="cheap eats">🪙 Cheap eats</option>
-              <option value="mid-range">💳 Mid-range</option>
-              <option value="fine dining">💎 Fine dining</option>
+              <option value="cheap eats">Cheap eats</option>
+              <option value="mid-range">Mid-range</option>
+              <option value="fine dining">Fine dining</option>
             </select>
           </div>
         </div>

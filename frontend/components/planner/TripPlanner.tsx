@@ -252,18 +252,18 @@ export function TripPlanner() {
         <div>
           <label className="text-xs font-medium text-[#8892b0] mb-1 block">Budget</label>
           <select className="input-dark" {...reg("budget")}>
-            <option value="low">🪙 Low</option>
-            <option value="medium">💳 Medium</option>
-            <option value="luxury">💎 Luxury</option>
+          <option value="low">Low</option>
+            <option value="medium">Medium</option>
+            <option value="luxury">Luxury</option>
           </select>
         </div>
         <div>
           <label className="text-xs font-medium text-[#8892b0] mb-1 block">Style</label>
           <select className="input-dark" {...reg("travel_style")}>
-            <option value="relaxed">😌 Relaxed</option>
-            <option value="balanced">⚖️ Balanced</option>
-            <option value="adventurous">🧗 Adventurous</option>
-            <option value="family-friendly">👨‍👩‍👧 Family</option>
+            <option value="relaxed">Relaxed</option>
+            <option value="balanced">Balanced</option>
+            <option value="adventurous">Adventurous</option>
+            <option value="family-friendly">Family-friendly</option>
           </select>
         </div>
       </div>

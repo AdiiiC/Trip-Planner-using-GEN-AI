@@ -20,7 +20,7 @@ const VISA_CONFIG: Record<VisaType, {
   bg: string;
   border: string;
   icon: React.ElementType;
-  emoji: string;
+  dot: string;
 }> = {
   visa_free: {
     label: "Visa Free",
@@ -28,15 +28,15 @@ const VISA_CONFIG: Record<VisaType, {
     bg: "bg-emerald-500/15",
     border: "border-emerald-500/30",
     icon: CheckCircle2,
-    emoji: "🟢",
+    dot: "bg-emerald-500",
   },
   arrival_card: {
-    label: "Visa Free · Arrival Card Required",
+    label: "Visa Free — Arrival Card Required",
     color: "text-teal-300",
     bg: "bg-teal-500/15",
     border: "border-teal-500/30",
     icon: FileText,
-    emoji: "🟢",
+    dot: "bg-teal-500",
   },
   evisa: {
     label: "e-Visa Required",
@@ -44,7 +44,7 @@ const VISA_CONFIG: Record<VisaType, {
     bg: "bg-sky-500/15",
     border: "border-sky-500/30",
     icon: Globe,
-    emoji: "🔵",
+    dot: "bg-sky-500",
   },
   voa: {
     label: "Visa on Arrival",
@@ -52,7 +52,7 @@ const VISA_CONFIG: Record<VisaType, {
     bg: "bg-amber-500/15",
     border: "border-amber-500/30",
     icon: CreditCard,
-    emoji: "🟡",
+    dot: "bg-amber-500",
   },
   evisa_or_voa: {
     label: "e-Visa or Visa on Arrival",
@@ -60,7 +60,7 @@ const VISA_CONFIG: Record<VisaType, {
     bg: "bg-amber-500/15",
     border: "border-amber-500/30",
     icon: CreditCard,
-    emoji: "🟡",
+    dot: "bg-amber-500",
   },
   consulate: {
     label: "Consulate / Embassy Visa",
@@ -68,7 +68,7 @@ const VISA_CONFIG: Record<VisaType, {
     bg: "bg-rose-500/15",
     border: "border-rose-500/30",
     icon: ShieldAlert,
-    emoji: "🔴",
+    dot: "bg-rose-500",
   },
   unknown: {
     label: "Verify with Embassy",
@@ -76,7 +76,7 @@ const VISA_CONFIG: Record<VisaType, {
     bg: "bg-white/5",
     border: "border-white/10",
     icon: AlertTriangle,
-    emoji: "⚪",
+    dot: "bg-slate-500",
   },
 };
 

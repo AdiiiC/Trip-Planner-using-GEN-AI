@@ -63,9 +63,9 @@ export function HotelFinder() {
             <label className="text-xs font-medium text-[#8892b0] mb-1 block">Budget tier</label>
             <select value={tier} onChange={e => setTier(e.target.value)} className="input-dark">
               <option value="any">Any</option>
-              <option value="budget">🪙 Budget</option>
-              <option value="mid-range">💳 Mid-range</option>
-              <option value="luxury">💎 Luxury</option>
+                <option value="budget">Budget</option>
+                <option value="mid-range">Mid-range</option>
+                <option value="luxury">Luxury</option>
             </select>
           </div>
         </div>

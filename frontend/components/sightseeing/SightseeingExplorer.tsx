@@ -21,8 +21,8 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 const CATEGORY_ICONS: Record<string, string> = {
-  heritage: "🏛️", nature: "🌿", food: "🍜", adventure: "🧗", culture: "🎭",
-  beach: "🏖️", museum: "🖼️", "theme-park": "🎡", religious: "🕌",
+  heritage: "Heritage", nature: "Nature", food: "Food", adventure: "Adventure", culture: "Culture",
+  beach: "Beach", museum: "Museum", "theme-park": "Theme Park", religious: "Religious",
 };
 
 const ALL_CATEGORIES = Object.keys(CATEGORY_COLORS);
@@ -134,7 +134,7 @@ export function SightseeingExplorer() {
                         ? CATEGORY_COLORS[cat] ?? "bg-indigo-600 text-white border-indigo-500"
                         : "border-white/10 text-[#8892b0] hover:text-white"
                     )}>
-                    {CATEGORY_ICONS[cat] ?? "📍"} {cat}
+                    {CATEGORY_ICONS[cat] ?? cat}
                   </button>
                 ))}
               </div>
@@ -217,7 +217,7 @@ function AttractionCard({ attraction: a }: { attraction: Attraction }) {
       <div className="flex items-start justify-between gap-2">
         <h4 className="text-white font-semibold text-sm leading-tight">{a.name}</h4>
         <span className={cn("shrink-0 text-[10px] font-medium rounded-full border px-2 py-0.5 capitalize", categoryClass)}>
-          {CATEGORY_ICONS[a.category] ?? "📍"} {a.category}
+          {CATEGORY_ICONS[a.category] ?? a.category}
         </span>
       </div>
 
@@ -278,7 +278,7 @@ function NearbyCard({ place: p }: { place: NearbyPlace }) {
           <Ticket className="w-3 h-3" /> {p.entry_cost}
         </div>
         {p.how_to_get && (
-          <span className="text-[#8892b0]">🚌 {p.how_to_get}</span>
+          <span className="text-[#8892b0]">{p.how_to_get}</span>
         )}
       </div>
     </motion.div>
