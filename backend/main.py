@@ -16,8 +16,20 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
+import sentry_sdk
 
 load_dotenv()
+
+# ── Sentry error monitoring ───────────────────────────────────────────────────
+# Set SENTRY_DSN_BACKEND in Render environment variables.
+# send_default_pii=False — we don't collect user IPs or personal data.
+_sentry_dsn = os.getenv("SENTRY_DSN_BACKEND", "")
+if _sentry_dsn:
+    sentry_sdk.init(
+        dsn=_sentry_dsn,
+        send_default_pii=False,   # no IPs, no personal data collected
+        traces_sample_rate=0.0,   # error-only, no performance tracing quota used
+    )
 
 from agents.budget import BudgetInput, calculate_budget
 from agents.flights import FlightSearchInput, search_flights
