@@ -24,8 +24,14 @@ export class ErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    // Log to console — swap for Sentry.captureException(error, { extra: info }) when ready
-    console.error("[ErrorBoundary]", error, info.componentStack);
+    // Report to Sentry in production
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const Sentry = require("@sentry/nextjs");
+      Sentry.captureException(error, { extra: { componentStack: info.componentStack } });
+    } catch {
+      console.error("[ErrorBoundary]", error, info.componentStack);
+    }
   }
 
   reset = () => this.setState({ hasError: false, error: null });
