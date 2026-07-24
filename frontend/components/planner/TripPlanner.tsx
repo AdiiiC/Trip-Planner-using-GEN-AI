@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -8,7 +8,7 @@ import { z } from "zod";
 import {
   Globe, RefreshCw, Luggage, Shield, Send, Copy, Check,
   Download, Share2, BookOpen, Plus, Trash2, Cloud,
-  Thermometer, Wind, Eye, Droplets, PlusCircle, ShieldCheck,
+  Thermometer, Wind, Droplets, PlusCircle, ShieldCheck, Printer,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -17,6 +17,8 @@ import { useTripHistory, buildShareUrl, downloadMarkdown } from "@/lib/tripHisto
 import type { WeatherResult, CityStop } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import confetti from "canvas-confetti";
+import { CityAutocomplete } from "@/components/ui/CityAutocomplete";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -117,6 +119,86 @@ function WeatherWidget({ city }: { city: string }) {
   );
 }
 
+// ─── recently searched hook ───────────────────────────────────────────────────
+
+const RECENT_KEY = "tripmind_recent_cities";
+
+function useRecentCities() {
+  const [cities, setCities] = useState<string[]>([]);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(RECENT_KEY);
+      if (raw) setCities(JSON.parse(raw));
+    } catch {}
+  }, []);
+
+  const addCity = useCallback((city: string) => {
+    if (!city.trim()) return;
+    setCities(prev => {
+      const updated = [city, ...prev.filter(c => c !== city)].slice(0, 6);
+      try { localStorage.setItem(RECENT_KEY, JSON.stringify(updated)); } catch {}
+      return updated;
+    });
+  }, []);
+
+  return { cities, addCity };
+}
+
+// ─── Wikipedia hero image hook ────────────────────────────────────────────────
+
+function useWikiHero(city: string) {
+  const [url, setUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!city.trim()) { setUrl(null); return; }
+    const name = city.split(",")[0].trim();
+    fetch(
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`
+    )
+      .then(r => r.ok ? r.json() : null)
+      .then(d => setUrl(d?.thumbnail?.source ?? d?.originalimage?.source ?? null))
+      .catch(() => setUrl(null));
+  }, [city]);
+  return url;
+}
+
+// ─── markdown with per-day copy buttons ──────────────────────────────────────
+
+function MarkdownWithDayCopy({ content }: { content: string }) {
+  const [copiedDay, setCopiedDay] = useState<number | null>(null);
+
+  // Split on ## Day headings while keeping the heading in each section
+  const sections = useMemo(() => content.split(/(?=^## Day \d)/m), [content]);
+
+  const copySection = (text: string, idx: number) => {
+    navigator.clipboard.writeText(text);
+    setCopiedDay(idx);
+    setTimeout(() => setCopiedDay(null), 2000);
+  };
+
+  return (
+    <div>
+      {sections.map((section, i) => {
+        const isDaySection = /^## Day \d/m.test(section);
+        return (
+          <div key={i} className={isDaySection ? "relative group/day" : ""}>
+            {isDaySection && (
+              <button
+                onClick={() => copySection(section, i)}
+                className="absolute top-1 right-0 opacity-0 group-hover/day:opacity-100 transition-opacity flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[#8892b0] hover:text-white no-print"
+              >
+                {copiedDay === i
+                  ? <><Check className="w-3 h-3 text-emerald-400" /> Copied</>
+                  : <><Copy className="w-3 h-3" /> Copy day</>}
+              </button>
+            )}
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{section}</ReactMarkdown>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ─── main component ───────────────────────────────────────────────────────────
 
 export function TripPlanner() {
@@ -130,6 +212,7 @@ export function TripPlanner() {
   const [activeTab, setActiveTab] = useState<"output" | "refine" | "history">("output");
 
   const { trips, save, remove, load } = useTripHistory();
+  const { cities: recentCities, addCity: addRecentCity } = useRecentCities();
 
   // ── single-city form ─────────────────────────────────────────────────────
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<SingleForm>({
@@ -144,6 +227,23 @@ export function TripPlanner() {
   const city     = watch("city");
   const days     = watch("days");
   const travelDate = watch("travel_date");
+
+  // Hero image for the searched city
+  const heroUrl = useWikiHero(output && city ? city : "");
+
+  // Progress: count ## Day headings in streamed output
+  const daysCompleted = useMemo(() => {
+    const matches = output.match(/^## Day \d/gm);
+    return matches?.length ?? 0;
+  }, [output]);
+
+  // Confetti when streaming completes
+  useEffect(() => {
+    if (!streaming && output.length > 200) {
+      confetti({ particleCount: 90, spread: 70, origin: { y: 0.65 }, colors: ["#818cf8", "#c084fc", "#fb7185", "#34d399"] });
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [streaming]);
 
   // ── multi-city form ──────────────────────────────────────────────────────
   const multiForm = useForm<MultiForm>({
@@ -182,6 +282,7 @@ export function TripPlanner() {
 
   // ── single submit ────────────────────────────────────────────────────────
   const onSingleSubmit = (v: SingleForm) => {
+    addRecentCity(v.city);
     const interests = v.interests.split(",").map(s => s.trim()).filter(Boolean);
     if (mode === "plan") {
       startStream((oc, od, oe) => api.planTrip({ city: v.city, days: v.days, interests, budget: v.budget, travel_style: v.travel_style, dietary: v.dietary, travel_date: v.travel_date, currency: v.currency }, oc, od, oe));
@@ -194,6 +295,7 @@ export function TripPlanner() {
 
   // ── multi-city submit ────────────────────────────────────────────────────
   const onMultiSubmit = (v: MultiForm) => {
+    v.stops.forEach(s => addRecentCity(s.city));
     startStream((oc, od, oe) => api.multiCityPlan({
       stops: v.stops,
       interests: v.interests.split(",").map(s => s.trim()).filter(Boolean),
@@ -223,6 +325,8 @@ export function TripPlanner() {
     const fname = `tripmind-${city || "trip"}-${new Date().toISOString().slice(0,10)}.md`;
     downloadMarkdown(fname, output);
   };
+
+  const handlePrint = () => window.print();
 
   const handleShare = () => {
     const url = buildShareUrl(city, days, output);
@@ -311,8 +415,27 @@ export function TripPlanner() {
             <form onSubmit={handleSubmit(onSingleSubmit)} className="glass rounded-2xl p-5 space-y-4">
               <div>
                 <label className="text-xs font-medium text-[#8892b0] mb-1 block">City / Destination *</label>
-                <input className="input-dark" placeholder="e.g. Kyoto, Japan" {...register("city")} />
+                <CityAutocomplete
+                  value={city}
+                  onChange={v => setValue("city", v)}
+                  placeholder="e.g. Kyoto, Japan"
+                />
                 {errors.city && <p className="text-red-400 text-xs mt-1">{errors.city.message}</p>}
+                {/* Recently searched chips */}
+                {recentCities.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {recentCities.map(rc => (
+                      <button
+                        key={rc}
+                        type="button"
+                        onClick={() => setValue("city", rc)}
+                        className="text-[10px] rounded-full border border-indigo-500/30 bg-indigo-600/10 text-indigo-300 px-2 py-0.5 hover:bg-indigo-600/20 transition-colors"
+                      >
+                        {rc}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Weather widget */}
@@ -334,6 +457,24 @@ export function TripPlanner() {
                 <input className="input-dark" placeholder="temples, street food, hiking" {...register("interests")} />
               </div>
               {sharedFormFields(register)}
+
+              {/* Streaming progress bar */}
+              {streaming && mode === "plan" && (
+                <div className="space-y-1 no-print">
+                  <div className="flex justify-between text-[10px] text-[#8892b0]">
+                    <span>{daysCompleted > 0 ? `Writing Day ${daysCompleted}…` : "Starting…"}</span>
+                    <span>{daysCompleted} / {days} days</span>
+                  </div>
+                  <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                    <motion.div
+                      className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full"
+                      initial={{ width: "5%" }}
+                      animate={{ width: `${Math.max(5, (daysCompleted / days) * 100)}%` }}
+                      transition={{ duration: 0.4 }}
+                    />
+                  </div>
+                </div>
+              )}
 
               <button type="submit" disabled={streaming}
                 className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-60">
@@ -480,9 +621,10 @@ export function TripPlanner() {
 
             {/* Action buttons */}
             {output && (
-              <div className="ml-auto flex gap-1 flex-wrap">
+              <div className="ml-auto flex gap-1 flex-wrap no-print">
                 <ActionBtn icon={copied ? Check : Copy} label={copied ? "Copied" : "Copy"} active={copied} onClick={handleCopy} />
                 <ActionBtn icon={Download} label="Download" onClick={handleDownload} />
+                <ActionBtn icon={Printer} label="Print" onClick={handlePrint} />
                 <ActionBtn icon={BookOpen} label="Save" onClick={handleSave} />
                 <ActionBtn icon={shared ? Check : Share2} label={shared ? "Copied!" : "Share"} active={shared} onClick={handleShare} />
               </div>
@@ -509,12 +651,34 @@ export function TripPlanner() {
                   </div>
                 )}
                 {(output || streaming) && (
-                  <div className="prose-trip text-sm">
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown>
-                    {streaming && (
-                      <span className="inline-block w-1.5 h-4 bg-indigo-400 animate-pulse rounded ml-0.5" />
+                  <>
+                    {/* Destination hero image */}
+                    {heroUrl && !streaming && (
+                      <motion.div
+                        initial={{ opacity: 0, scale: 1.02 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="mb-5 rounded-xl overflow-hidden h-40 w-full"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={heroUrl}
+                          alt={city}
+                          className="w-full h-full object-cover"
+                          onError={e => (e.currentTarget.style.display = "none")}
+                        />
+                      </motion.div>
                     )}
-                  </div>
+                    <div className="prose-trip text-sm">
+                      {streaming
+                        ? (
+                          <>
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown>
+                            <span className="inline-block w-1.5 h-4 bg-indigo-400 animate-pulse rounded ml-0.5" />
+                          </>
+                        )
+                        : <MarkdownWithDayCopy content={output} />}
+                    </div>
+                  </>
                 )}
               </>
             )}

@@ -3,10 +3,42 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation } from "@tanstack/react-query";
-import { Utensils, Search, Star, Clock, Lightbulb } from "lucide-react";
+import { Search, Star, Clock, Lightbulb } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Restaurant, RestaurantResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { CityAutocomplete } from "@/components/ui/CityAutocomplete";
+
+function StarRating({ rating }: { rating: string }) {
+  const num = parseFloat(rating);
+  if (isNaN(num)) {
+    return (
+      <div className="flex items-center gap-1 text-xs text-[#8892b0]">
+        <Star className="w-3 h-3 text-amber-400 fill-amber-400" /> {rating}
+      </div>
+    );
+  }
+  // Normalise to 5-star scale (handles both /5 and /10 ratings)
+  const outOf5 = num > 5 ? (num / 10) * 5 : num;
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map(i => (
+        <Star
+          key={i}
+          className={cn(
+            "w-3 h-3 transition-colors",
+            i <= Math.floor(outOf5)
+              ? "text-amber-400 fill-amber-400"
+              : i - 0.5 <= outOf5
+              ? "text-amber-400 fill-amber-400/40"
+              : "text-[#8892b0]"
+          )}
+        />
+      ))}
+      <span className="text-xs text-[#8892b0] ml-1">{num}</span>
+    </div>
+  );
+}
 
 const TIER_COLORS: Record<string, string> = {
   "cheap eats":  "bg-emerald-500/20 text-emerald-300 border-emerald-500/30",
@@ -36,8 +68,11 @@ export function RestaurantFinder() {
         <div className="grid sm:grid-cols-3 gap-3 mb-4">
           <div>
             <label className="text-xs font-medium text-[#8892b0] mb-1 block">City</label>
-            <input value={city} onChange={e => setCityV(e.target.value)}
-              placeholder="Ho Chi Minh City, Penang…" className="input-dark" />
+            <CityAutocomplete
+              value={city}
+              onChange={setCityV}
+              placeholder="Ho Chi Minh City, Penang…"
+            />
           </div>
           <div>
             <label className="text-xs font-medium text-[#8892b0] mb-1 block">Cuisine</label>
@@ -131,11 +166,7 @@ function RestaurantCard({ restaurant: r }: { restaurant: Restaurant }) {
         <div className="flex items-center gap-1.5 text-xs">
           <span className="text-emerald-400 font-medium">{r.price_range}</span>
         </div>
-        {rating && (
-          <div className="flex items-center gap-1 text-xs text-[#8892b0]">
-            <Star className="w-3 h-3 text-amber-400 fill-amber-400" /> {rating}
-          </div>
-        )}
+        {rating && <StarRating rating={rating} />}
         {hours && (
           <div className="flex items-center gap-1 text-xs text-[#8892b0]">
             <Clock className="w-3 h-3" /> {hours}

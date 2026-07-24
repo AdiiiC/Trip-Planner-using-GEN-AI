@@ -7,6 +7,42 @@ import { Plane, Search, Luggage, Clock, Zap, ExternalLink, ArrowRight } from "lu
 import { api } from "@/lib/api";
 import type { FlightResult, FlightSearchResult } from "@/lib/types";
 import { formatINR, cn } from "@/lib/utils";
+import { SkeletonFlightCard } from "@/components/ui/Skeleton";
+
+// Airline name → domain for Clearbit logo
+const AIRLINE_DOMAINS: Record<string, string> = {
+  "air india":        "airindia.in",
+  "indigo":           "goindigo.in",
+  "spicejet":         "spicejet.com",
+  "vistara":          "airvistara.com",
+  "akasa":            "akasaair.com",
+  "thai airways":     "thaiairways.com",
+  "airasia":          "airasia.com",
+  "air asia":         "airasia.com",
+  "singapore airlines": "singaporeair.com",
+  "emirates":         "emirates.com",
+  "qatar airways":    "qatarairways.com",
+  "etihad":           "etihad.com",
+  "lufthansa":        "lufthansa.com",
+  "british airways":  "britishairways.com",
+  "malaysia airlines":"malaysiaairlines.com",
+  "vietnam airlines": "vietnamairlines.com",
+  "scoot":            "flyscoot.com",
+  "thai lion":        "lionairthai.com",
+  "batik air":        "batikair.com",
+  "united":           "united.com",
+  "delta":            "delta.com",
+  "american":         "aa.com",
+  "cathay":           "cathaypacific.com",
+};
+
+function getAirlineLogo(airline: string): string | null {
+  const lower = airline.toLowerCase();
+  for (const [key, domain] of Object.entries(AIRLINE_DOMAINS)) {
+    if (lower.includes(key)) return `https://logo.clearbit.com/${domain}`;
+  }
+  return null;
+}
 
 const POPULAR_ROUTES = [
   { origin: "Bengaluru (BLR)", destination: "Ho Chi Minh City (SGN)" },
@@ -124,16 +160,10 @@ export function FlightTracker() {
         </div>
       )}
 
-      {/* Loading state */}
+      {/* Loading state — skeletons */}
       {mutation.isPending && (
-        <div className="glass rounded-2xl p-12 flex flex-col items-center gap-3">
-          <div className="flex gap-2">
-            {[0,1,2].map(i => (
-              <div key={i} className="w-3 h-3 rounded-full bg-indigo-400 animate-bounce"
-                style={{ animationDelay: `${i * 0.15}s` }} />
-            ))}
-          </div>
-          <p className="text-[#8892b0] text-sm">Searching Skyscanner.co.in for one-way flights with check-in baggage…</p>
+        <div className="space-y-3">
+          {[0,1,2].map(i => <SkeletonFlightCard key={i} />)}
         </div>
       )}
 
@@ -225,7 +255,21 @@ function FlightCard({ flight: f, isFirst, rank }: { flight: FlightResult; isFirs
       <div className="flex items-center justify-between gap-4 flex-wrap">
         {/* Airline + badges */}
         <div className="min-w-[120px] space-y-1">
-          <p className="text-white font-semibold">{f.airline}</p>
+          <div className="flex items-center gap-2">
+            {(() => {
+              const logo = getAirlineLogo(f.airline);
+              return logo ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={logo}
+                  alt={f.airline}
+                  className="w-6 h-6 rounded object-contain bg-white p-0.5"
+                  onError={e => (e.currentTarget.style.display = "none")}
+                />
+              ) : null;
+            })()}
+            <p className="text-white font-semibold">{f.airline}</p>
+          </div>
           {f.flight_number && f.flight_number !== "null" && (
             <p className="text-xs text-[#8892b0]">{f.flight_number}</p>
           )}

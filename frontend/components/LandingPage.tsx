@@ -2,7 +2,18 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { Calculator, Globe, Map, Zap, Search, TrendingUp, FileText, Luggage, Plane, Hotel, UtensilsCrossed, ShieldCheck } from "lucide-react";
+
+const BADGE_TIPS: Record<string, string> = {
+  "GPT-powered":    "Itineraries are streamed live using Groq Llama 3.3",
+  "Multi-currency": "Supports USD, EUR, GBP, INR, SGD, AUD, JPY with live forex",
+  "Web-scraped":    "Real attraction data pulled via Tavily web search",
+  "Skyscanner":     "Prices sourced from Skyscanner.co.in — always verify before booking",
+  "Booking.com":    "Hotel suggestions from Booking.com, MakeMyTrip & Agoda",
+  "Web-sourced":    "Restaurant data sourced live via Tavily search",
+  "Indian passport":"Visa requirements specifically for Indian passport holders",
+};
 
 const features = [
   {
@@ -79,87 +90,103 @@ const extras = [
 
 export function LandingPage() {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-grid">
-      {/* Glow blobs */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -top-32 left-1/4 h-80 w-80 rounded-full bg-indigo-600/20 blur-3xl" />
-        <div className="absolute top-60 right-1/4 h-64 w-64 rounded-full bg-violet-600/15 blur-3xl" />
-        <div className="absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-emerald-600/10 blur-3xl" />
-      </div>
-
-      <div className="relative mx-auto max-w-6xl px-4 py-20">
-        {/* Hero */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
-          className="text-center mb-16"
-        >
-          <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-600/10 px-4 py-1.5 text-xs font-medium text-indigo-300 mb-6">
-            <Zap className="w-3.5 h-3.5" />
-            Powered by LangGraph + Groq Llama 3.3
-          </div>
-          <h1 className="text-5xl font-bold tracking-tight mb-4">
-            <span className="gradient-text">Plan smarter trips.</span>
-            <br />
-            <span className="text-white">Spend less, see more.</span>
-          </h1>
-          <p className="text-[#8892b0] text-lg max-w-2xl mx-auto leading-relaxed">
-            One tool for itinerary planning, budget breakdowns, live forex, and
-            sightseeing discovery — all AI-powered.
-          </p>
-        </motion.div>
-
-        {/* Feature cards */}
-        <div className="grid md:grid-cols-3 gap-6 mb-16">
-          {features.map((f, i) => (
-            <motion.div
-              key={f.href}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 + i * 0.1 }}
-            >
-              <Link href={f.href}>
-                <div className="group relative glass rounded-2xl p-6 h-full hover:border-indigo-500/40 transition-all duration-300 hover:-translate-y-1 cursor-pointer">
-                  <div className={`inline-flex p-2.5 rounded-xl bg-gradient-to-br ${f.color} mb-4`}>
-                    <f.icon className="w-5 h-5 text-white" />
-                  </div>
-                  <div className="absolute top-4 right-4">
-                    <span className="text-[10px] font-medium rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[#8892b0]">
-                      {f.badge}
-                    </span>
-                  </div>
-                  <h3 className="text-white font-semibold text-lg mb-2">{f.title}</h3>
-                  <p className="text-[#8892b0] text-sm leading-relaxed">{f.desc}</p>
-                  <div className="mt-4 text-indigo-400 text-sm font-medium group-hover:text-indigo-300 transition-colors">
-                    Open →
-                  </div>
-                </div>
-              </Link>
-            </motion.div>
-          ))}
+    <Tooltip.Provider delayDuration={300}>
+      <div className="relative min-h-screen overflow-hidden bg-grid">
+        {/* Glow blobs */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden">
+          <div className="absolute -top-32 left-1/4 h-80 w-80 rounded-full bg-indigo-600/20 blur-3xl" />
+          <div className="absolute top-60 right-1/4 h-64 w-64 rounded-full bg-violet-600/15 blur-3xl" />
+          <div className="absolute bottom-0 left-1/3 h-72 w-72 rounded-full bg-emerald-600/10 blur-3xl" />
         </div>
 
-        {/* Capabilities strip */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5 }}
-          className="glass rounded-2xl p-6"
-        >
-          <p className="text-[#8892b0] text-xs font-semibold uppercase tracking-wider mb-4">
-            Built-in capabilities
-          </p>
-          <div className="flex flex-wrap gap-3">
-            {extras.map(({ icon: Icon, text }) => (
-              <div key={text} className="flex items-center gap-2 rounded-full bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-[#8892b0]">
-                <Icon className="w-3.5 h-3.5 text-indigo-400" />
-                {text}
-              </div>
+        <div className="relative mx-auto max-w-6xl px-4 py-20">
+          {/* Hero */}
+          <motion.div
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6 }}
+            className="text-center mb-16"
+          >
+            <div className="inline-flex items-center gap-2 rounded-full border border-indigo-500/30 bg-indigo-600/10 px-4 py-1.5 text-xs font-medium text-indigo-300 mb-6">
+              <Zap className="w-3.5 h-3.5" />
+              Powered by LangGraph + Groq Llama 3.3
+            </div>
+            <h1 className="text-5xl font-bold tracking-tight mb-4">
+              <span className="gradient-text">Plan smarter trips.</span>
+              <br />
+              <span className="text-white">Spend less, see more.</span>
+            </h1>
+            <p className="text-[#8892b0] text-lg max-w-2xl mx-auto leading-relaxed">
+              One tool for itinerary planning, budget breakdowns, live forex, and
+              sightseeing discovery — all AI-powered.
+            </p>
+          </motion.div>
+
+          {/* Feature cards */}
+          <div className="grid md:grid-cols-3 gap-6 mb-16">
+            {features.map((f, i) => (
+              <motion.div
+                key={f.href}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 + i * 0.1 }}
+                className="card-glow-border rounded-2xl"
+              >
+                <Link href={f.href}>
+                  <div className="group relative glass rounded-2xl p-6 h-full hover:border-indigo-500/40 transition-all duration-300 hover:-translate-y-1 cursor-pointer">
+                    <div className={`inline-flex p-2.5 rounded-xl bg-gradient-to-br ${f.color} mb-4`}>
+                      <f.icon className="w-5 h-5 text-white" />
+                    </div>
+                    <div className="absolute top-4 right-4">
+                      <Tooltip.Root>
+                        <Tooltip.Trigger asChild>
+                          <span className="text-[10px] font-medium rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[#8892b0] cursor-help">
+                            {f.badge}
+                          </span>
+                        </Tooltip.Trigger>
+                        <Tooltip.Portal>
+                          <Tooltip.Content
+                            className="z-50 rounded-lg bg-[#131829] border border-[#1e2540] px-3 py-2 text-xs text-[#c7d2fe] max-w-[180px] text-center shadow-xl"
+                            sideOffset={5}
+                          >
+                            {BADGE_TIPS[f.badge] ?? f.badge}
+                            <Tooltip.Arrow className="fill-[#1e2540]" />
+                          </Tooltip.Content>
+                        </Tooltip.Portal>
+                      </Tooltip.Root>
+                    </div>
+                    <h3 className="text-white font-semibold text-lg mb-2">{f.title}</h3>
+                    <p className="text-[#8892b0] text-sm leading-relaxed">{f.desc}</p>
+                    <div className="mt-4 text-indigo-400 text-sm font-medium group-hover:text-indigo-300 transition-colors">
+                      Open →
+                    </div>
+                  </div>
+                </Link>
+              </motion.div>
             ))}
           </div>
-        </motion.div>
+
+          {/* Capabilities strip */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.5 }}
+            className="glass rounded-2xl p-6"
+          >
+            <p className="text-[#8892b0] text-xs font-semibold uppercase tracking-wider mb-4">
+              Built-in capabilities
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {extras.map(({ icon: Icon, text }) => (
+                <div key={text} className="flex items-center gap-2 rounded-full bg-white/5 border border-white/10 px-3 py-1.5 text-sm text-[#8892b0]">
+                  <Icon className="w-3.5 h-3.5 text-indigo-400" />
+                  {text}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
       </div>
-    </div>
+    </Tooltip.Provider>
   );
 }
