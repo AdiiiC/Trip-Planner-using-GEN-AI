@@ -3,13 +3,13 @@ Weather forecast — uses wttr.in (no API key required).
 """
 from __future__ import annotations
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import httpx
 
 
 class WeatherInput(BaseModel):
-    city: str
-    date: str = ""   # "YYYY-MM-DD" — used to label the response
+    city: str = Field(..., min_length=1, max_length=100)
+    date: str = Field(default="", max_length=10)
 
 
 async def get_weather(inp: WeatherInput) -> dict:

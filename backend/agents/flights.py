@@ -5,7 +5,6 @@ Filters: one-way · check-in baggage included.
 from __future__ import annotations
 
 import json
-import re
 
 from pydantic import BaseModel, Field
 from langchain_groq import ChatGroq

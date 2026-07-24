@@ -5,17 +5,17 @@ from __future__ import annotations
 
 from typing import AsyncIterator
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 
 
 class InsuranceInput(BaseModel):
-    destination: str
-    trip_cost_usd: float
-    duration_days: int
-    travelers: int = 1
-    traveler_age: int = 30
+    destination:   str   = Field(..., min_length=1, max_length=200)
+    trip_cost_usd: float = Field(..., ge=0, le=1_000_000)
+    duration_days: int   = Field(..., ge=1, le=365)
+    travelers:     int   = Field(default=1, ge=1, le=20)
+    traveler_age:  int   = Field(default=30, ge=1, le=120)
 
 
 _prompt = ChatPromptTemplate.from_messages([

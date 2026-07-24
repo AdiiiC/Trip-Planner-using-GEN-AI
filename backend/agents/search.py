@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from threading import Lock
 from typing import Any
 
 import httpx
@@ -29,15 +30,18 @@ from agents.cache import search_cache
 SERPER_KEY = os.getenv("SERPER_API_KEY", "")
 EXA_KEY    = os.getenv("EXA_API_KEY", "")
 
-# Module-level Exa singleton — created once, reused across requests
+# Thread-safe Exa singleton — Lock prevents double-init under concurrent requests
 _exa_client: object | None = None
+_exa_lock = Lock()
 
 
 def _get_exa():
     global _exa_client
     if _exa_client is None:
-        from exa_py import Exa
-        _exa_client = Exa(api_key=EXA_KEY)
+        with _exa_lock:
+            if _exa_client is None:  # double-checked locking
+                from exa_py import Exa
+                _exa_client = Exa(api_key=EXA_KEY)
     return _exa_client
 
 

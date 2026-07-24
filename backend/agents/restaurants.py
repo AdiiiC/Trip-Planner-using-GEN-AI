@@ -4,17 +4,16 @@ Restaurant finder — Tavily-powered, returns top restaurants with price ranges.
 from __future__ import annotations
 
 import json
-import re
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 
 
 class RestaurantInput(BaseModel):
-    city: str
-    cuisine: str = "any"
-    budget: str = "any"   # "cheap eats" / "mid-range" / "fine dining" / "any"
+    city:    str = Field(..., min_length=1, max_length=100)
+    cuisine: str = Field(default="any", max_length=100)
+    budget:  str = Field(default="any", max_length=50)
 
 
 _SCHEMA = """{

@@ -4,20 +4,20 @@ Hotel price finder — Booking.com / MakeMyTrip via Tavily web search.
 from __future__ import annotations
 
 import json
-import re
+from datetime import datetime as dt
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 
 
 class HotelSearchInput(BaseModel):
-    city: str
-    check_in: str   # "YYYY-MM-DD"
-    check_out: str  # "YYYY-MM-DD"
-    guests: int = 1
-    rooms: int = 1
-    budget_tier: str = "any"   # "budget" / "mid-range" / "luxury" / "any"
+    city:        str = Field(..., min_length=1, max_length=100)
+    check_in:    str = Field(..., max_length=10)
+    check_out:   str = Field(..., max_length=10)
+    guests:      int = Field(default=1, ge=1, le=20)
+    rooms:       int = Field(default=1, ge=1, le=10)
+    budget_tier: str = Field(default="any", max_length=20)
 
 
 _SCHEMA = """{
