@@ -138,9 +138,10 @@ async def health():
     """Returns service health + which integrations are configured.
     Used by Render health checks and UptimeRobot monitoring."""
     services = {
-        "groq":   bool(os.getenv("GROQ_API_KEY")),
-        "serper": bool(os.getenv("SERPER_API_KEY")),
-        "exa":    bool(os.getenv("EXA_API_KEY")),
+        "groq":     bool(os.getenv("GROQ_API_KEY")),
+        "serper":   bool(os.getenv("SERPER_API_KEY")),
+        "exa":      bool(os.getenv("EXA_API_KEY")),
+        "rapidapi": bool(os.getenv("RAPIDAPI_KEY")),  # optional — falls back to Photon
     }
     return {
         "status":   "ok" if all(services.values()) else "degraded",
@@ -336,6 +337,73 @@ async def weather_endpoint(request: Request, body: WeatherInput):
 @limiter.limit("10/minute")
 async def multi_city_endpoint(request: Request, body: MultiCityInput):
     return _sse(generate_multi_city(body))
+
+
+@app.get("/api/cities")
+@limiter.limit("120/minute")
+async def cities_endpoint(request: Request, q: str = "", k: int = 7):
+    """
+    City autocomplete proxy — keeps RAPIDAPI_KEY server-side (never sent to browser).
+    Primary: GeoDB Cities API via RapidAPI (ranked by population).
+    Fallback: Photon by Komoot (free, no key required).
+    Results cached 1 hour — city names don't change.
+    """
+    from agents.cache import search_cache
+    q = q.strip()
+    if len(q) < 2:
+        return []
+
+    cache_key = search_cache.make_key("cities", q, str(k))
+    if cached := search_cache.get(cache_key):
+        return cached
+
+    rapidapi_key = os.getenv("RAPIDAPI_KEY", "")
+
+    # ── GeoDB (if key is configured) ─────────────────────────────────────────
+    if rapidapi_key:
+        try:
+            async with httpx.AsyncClient(timeout=5) as client:
+                resp = await client.get(
+                    "https://wft-geo-db.p.rapidapi.com/v1/geo/cities",
+                    params={"namePrefix": q, "limit": k, "sort": "-population", "types": "CITY"},
+                    headers={
+                        "X-RapidAPI-Key": rapidapi_key,
+                        "X-RapidAPI-Host": "wft-geo-db.p.rapidapi.com",
+                    },
+                )
+                if resp.status_code == 200:
+                    results = [
+                        {"name": c["city"], "country": c["country"], "region": c.get("region", "")}
+                        for c in resp.json().get("data", [])
+                    ]
+                    search_cache.set(cache_key, results)
+                    return results
+        except Exception:
+            pass  # fall through to Photon
+
+    # ── Photon fallback (free, no key) ────────────────────────────────────────
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(
+                "https://photon.komoot.io/api/",
+                params={"q": q, "limit": k, "lang": "en"},
+            )
+            if resp.status_code == 200:
+                results = [
+                    {
+                        "name": f["properties"]["name"],
+                        "country": f["properties"].get("country", ""),
+                        "region": f["properties"].get("state", ""),
+                    }
+                    for f in resp.json().get("features", [])
+                    if f["properties"].get("type") in ("city", "town", "village")
+                ][:k]
+                search_cache.set(cache_key, results)
+                return results
+    except Exception:
+        pass
+
+    return []
 
 
 @app.post("/api/visa-check")

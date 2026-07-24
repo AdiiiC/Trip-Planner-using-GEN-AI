@@ -17,52 +17,22 @@ interface Props {
   className?: string;
 }
 
-// GeoDB Cities API via RapidAPI (set NEXT_PUBLIC_RAPIDAPI_KEY in .env.local)
-// Falls back to Photon by Komoot — completely free, no key required
-async function fetchCities(query: string): Promise<CityOption[]> {
-  const rapidKey = process.env.NEXT_PUBLIC_RAPIDAPI_KEY;
+const BASE =
+  process.env.NEXT_PUBLIC_API_URL ??
+  (typeof window !== "undefined" && window.location.hostname !== "localhost"
+    ? ""
+    : "http://localhost:8000");
 
-  if (rapidKey) {
-    try {
-      const res = await fetch(
-        `https://wft-geo-db.p.rapidapi.com/v1/geo/cities?namePrefix=${encodeURIComponent(query)}&limit=7&sort=-population&types=CITY`,
-        {
-          headers: {
-            "X-RapidAPI-Key": rapidKey,
-            "X-RapidAPI-Host": "wft-geo-db.p.rapidapi.com",
-          },
-        }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        return (data.data ?? []).map((c: { city: string; country: string; region: string }) => ({
-          name: c.city,
-          country: c.country,
-          region: c.region,
-        }));
-      }
-    } catch {
-      // fall through to Photon
-    }
-  }
-
-  // Photon fallback (Komoot) — free, no API key
+/**
+ * Calls the backend /api/cities proxy — RAPIDAPI_KEY stays server-side, never in the browser.
+ */
+async function fetchCities(query: string, k = 7): Promise<CityOption[]> {
   const res = await fetch(
-    `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=7&lang=en`,
+    `${BASE}/api/cities?q=${encodeURIComponent(query)}&k=${k}`,
     { signal: AbortSignal.timeout(5000) }
   );
   if (!res.ok) return [];
-  const data = await res.json();
-  return (data.features ?? [])
-    .filter((f: { properties: { type?: string } }) =>
-      ["city", "town", "village"].includes(f.properties.type ?? "")
-    )
-    .slice(0, 7)
-    .map((f: { properties: { name: string; country?: string; state?: string } }) => ({
-      name: f.properties.name,
-      country: f.properties.country ?? "",
-      region: f.properties.state,
-    }));
+  return res.json();
 }
 
 export function CityAutocomplete({
@@ -110,7 +80,6 @@ export function CityAutocomplete({
       setLoading(true);
       try {
         const results = await fetchCities(q);
-        // Guard: don't update state if component unmounted (rare but possible)
         setOptions(results);
         setOpen(results.length > 0);
       } catch (e: unknown) {
