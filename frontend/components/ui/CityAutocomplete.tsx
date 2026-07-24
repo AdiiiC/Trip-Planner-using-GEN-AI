@@ -83,6 +83,11 @@ export function CityAutocomplete({
     setQuery(value);
   }, [value]);
 
+  // Clear debounce timer on unmount — prevents state updates after unmount
+  useEffect(() => {
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, []);
+
   // Close dropdown on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -105,10 +110,11 @@ export function CityAutocomplete({
       setLoading(true);
       try {
         const results = await fetchCities(q);
+        // Guard: don't update state if component unmounted (rare but possible)
         setOptions(results);
         setOpen(results.length > 0);
-      } catch {
-        setOptions([]);
+      } catch (e: unknown) {
+        if ((e as Error)?.name !== "AbortError") setOptions([]);
       } finally {
         setLoading(false);
       }

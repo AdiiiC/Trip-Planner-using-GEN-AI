@@ -150,13 +150,17 @@ function useWikiHero(city: string) {
   const [url, setUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!city.trim()) { setUrl(null); return; }
+    const controller = new AbortController();
     const name = city.split(",")[0].trim();
     fetch(
-      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`
+      `https://en.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(name)}`,
+      { signal: controller.signal }
     )
       .then(r => r.ok ? r.json() : null)
       .then(d => setUrl(d?.thumbnail?.source ?? d?.originalimage?.source ?? null))
-      .catch(() => setUrl(null));
+      .catch(e => { if (e.name !== "AbortError") setUrl(null); });
+    // Abort on city change or unmount — prevents stale state updates
+    return () => controller.abort();
   }, [city]);
   return url;
 }

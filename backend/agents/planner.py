@@ -4,7 +4,7 @@ import os
 from datetime import date
 from typing import AsyncIterator
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -62,31 +62,31 @@ def _llm() -> ChatGroq:
 
 
 class PlanInput(BaseModel):
-    city: str
-    days: int = 2
-    interests: list[str] = []
-    budget: str = "medium"
-    travel_style: str = "balanced"
-    dietary: str = "none"
-    travel_date: str = str(date.today())
-    currency: str = "USD"
+    city:         str = Field(..., min_length=1, max_length=100)
+    days:         int = Field(default=2, ge=1, le=14)
+    interests:    list[str] = Field(default=[], max_length=30)
+    budget:       str = Field(default="medium", pattern="^(low|medium|luxury)$")
+    travel_style: str = Field(default="balanced", pattern="^(relaxed|balanced|adventurous|family-friendly)$")
+    dietary:      str = Field(default="none", max_length=200)
+    travel_date:  str = Field(default=str(date.today()), max_length=10)
+    currency:     str = Field(default="USD", max_length=3)
 
 
 class RefineInput(BaseModel):
-    itinerary: str
-    feedback: str
+    itinerary: str = Field(..., min_length=1, max_length=50_000)
+    feedback:  str = Field(..., min_length=1, max_length=2_000)
 
 
 class PackingInput(BaseModel):
-    city: str
-    days: int
-    travel_style: str = "balanced"
-    interests: list[str] = []
-    travel_date: str = str(date.today())
+    city:         str = Field(..., min_length=1, max_length=100)
+    days:         int = Field(..., ge=1, le=14)
+    travel_style: str = Field(default="balanced", max_length=50)
+    interests:    list[str] = Field(default=[], max_length=30)
+    travel_date:  str = Field(default=str(date.today()), max_length=10)
 
 
 class VisaInput(BaseModel):
-    destination: str
+    destination: str = Field(..., min_length=1, max_length=100)
 
 
 async def generate_itinerary(inp: PlanInput) -> AsyncIterator[str]:
@@ -148,19 +148,19 @@ async def get_visa_info(inp: VisaInput) -> AsyncIterator[str]:
 # ── Multi-city ────────────────────────────────────────────────────────────────
 
 class CityStop(BaseModel):
-    city: str
-    days: int = 2
-    date: str = str(date.today())
-    notes: str = ""
+    city:  str = Field(..., min_length=1, max_length=100)
+    days:  int = Field(default=2, ge=1, le=14)
+    date:  str = Field(default=str(date.today()), max_length=10)
+    notes: str = Field(default="", max_length=500)
 
 
 class MultiCityInput(BaseModel):
-    stops: list[CityStop]
-    interests: list[str] = []
-    budget: str = "medium"
-    travel_style: str = "balanced"
-    dietary: str = "none"
-    currency: str = "USD"
+    stops:        list[CityStop] = Field(..., min_length=2, max_length=10)
+    interests:    list[str] = Field(default=[], max_length=30)
+    budget:       str = Field(default="medium", pattern="^(low|medium|luxury)$")
+    travel_style: str = Field(default="balanced", max_length=50)
+    dietary:      str = Field(default="none", max_length=200)
+    currency:     str = Field(default="USD", max_length=3)
 
 
 _multi_prompt = ChatPromptTemplate.from_messages([

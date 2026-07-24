@@ -1,14 +1,20 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 from typing import AsyncIterator
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 load_dotenv()
 
@@ -33,16 +39,59 @@ from agents.sightseeing import SightseeingInput, explore_sightseeing
 from agents.visa_check import VisaCheckInput, check_visa
 from agents.weather import WeatherInput, get_weather
 
-app = FastAPI(title="Trip Planner API", version="2.0.0")
+# ── logging ──────────────────────────────────────────────────────────────────
 
-# Allow all origins — public API, no auth required
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger(__name__)
+
+# ── rate limiter ─────────────────────────────────────────────────────────────
+
+limiter = Limiter(key_func=get_remote_address, default_limits=["60/minute"])
+
+# ── app ───────────────────────────────────────────────────────────────────────
+
+app = FastAPI(title="Trip Planner API", version="2.0.0")
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# ── security headers middleware ───────────────────────────────────────────────
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next) -> Response:
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "geolocation=(), microphone=()"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+# ── CORS — configurable via ALLOWED_ORIGINS env var ──────────────────────────
+# Production: set ALLOWED_ORIGINS=https://your-app.vercel.app in Render
+# Development: defaults to * (all origins)
+
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
+ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type"],
 )
+
+# ── debug mode (never enable in production) ───────────────────────────────────
+DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+
+def _safe_error(exc: Exception, context: str = "") -> str:
+    """Return a safe error message — never leaks internals in production."""
+    logger.error("%s: %s", context, exc, exc_info=True)
+    if DEBUG:
+        return str(exc)
+    return "An error occurred. Please try again."
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
@@ -65,44 +114,50 @@ async def health():
 
 
 @app.post("/api/budget")
-async def budget_endpoint(body: BudgetInput):
+@limiter.limit("30/minute")
+async def budget_endpoint(request: Request, body: BudgetInput):
     try:
         return calculate_budget(body)
     except Exception as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail=_safe_error(exc, "budget"))
 
 
 @app.post("/api/plan")
-async def plan_endpoint(body: PlanInput):
+@limiter.limit("10/minute")
+async def plan_endpoint(request: Request, body: PlanInput):
     return _sse(generate_itinerary(body))
 
 
 @app.post("/api/refine")
-async def refine_endpoint(body: RefineInput):
+@limiter.limit("10/minute")
+async def refine_endpoint(request: Request, body: RefineInput):
     return _sse(refine_itinerary(body))
 
 
 @app.post("/api/packing")
-async def packing_endpoint(body: PackingInput):
+@limiter.limit("15/minute")
+async def packing_endpoint(request: Request, body: PackingInput):
     return _sse(generate_packing_list(body))
 
 
 @app.post("/api/visa")
-async def visa_endpoint(body: VisaInput):
+@limiter.limit("15/minute")
+async def visa_endpoint(request: Request, body: VisaInput):
     return _sse(get_visa_info(body))
 
 
 @app.post("/api/sightseeing")
-async def sightseeing_endpoint(body: SightseeingInput):
+@limiter.limit("20/minute")
+async def sightseeing_endpoint(request: Request, body: SightseeingInput):
     try:
-        result = await explore_sightseeing(body)
-        return result
+        return await explore_sightseeing(body)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=_safe_error(exc, "sightseeing"))
 
 
 @app.get("/api/forex")
-async def forex_endpoint(base: str = "INR"):
+@limiter.limit("30/minute")
+async def forex_endpoint(request: Request, base: str = "INR"):
     """
     Returns live forex rates (INR base).
     Primary source: orientexchange.in (scraped concurrently per-currency page).
@@ -132,7 +187,7 @@ async def forex_endpoint(base: str = "INR"):
             }
             return {"base": "INR", "rates": rates_inverted, "provider": "exchangerate-api.com"}
     except Exception as exc:
-        raise HTTPException(status_code=503, detail=f"Forex API unavailable: {exc}")
+        raise HTTPException(status_code=503, detail=_safe_error(exc, "forex"))
 
 
 # ── orientexchange.in scraper ─────────────────────────────────────────────────
@@ -200,49 +255,56 @@ async def _scrape_orient_rates() -> dict[str, float] | None:
 # ── New feature endpoints ─────────────────────────────────────────────────────
 
 @app.post("/api/flights")
-async def flights_endpoint(body: FlightSearchInput):
+@limiter.limit("20/minute")
+async def flights_endpoint(request: Request, body: FlightSearchInput):
     try:
         return await search_flights(body)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=_safe_error(exc, "flights"))
 
 
 @app.post("/api/hotels")
-async def hotels_endpoint(body: HotelSearchInput):
+@limiter.limit("20/minute")
+async def hotels_endpoint(request: Request, body: HotelSearchInput):
     try:
         return await search_hotels(body)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=_safe_error(exc, "hotels"))
 
 
 @app.post("/api/restaurants")
-async def restaurants_endpoint(body: RestaurantInput):
+@limiter.limit("20/minute")
+async def restaurants_endpoint(request: Request, body: RestaurantInput):
     try:
         return await find_restaurants(body)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=_safe_error(exc, "restaurants"))
 
 
 @app.post("/api/insurance")
-async def insurance_endpoint(body: InsuranceInput):
+@limiter.limit("10/minute")
+async def insurance_endpoint(request: Request, body: InsuranceInput):
     return _sse(estimate_insurance(body))
 
 
 @app.post("/api/weather")
-async def weather_endpoint(body: WeatherInput):
+@limiter.limit("30/minute")
+async def weather_endpoint(request: Request, body: WeatherInput):
     try:
         return await get_weather(body)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=_safe_error(exc, "weather"))
 
 
 @app.post("/api/multi-city")
-async def multi_city_endpoint(body: MultiCityInput):
+@limiter.limit("10/minute")
+async def multi_city_endpoint(request: Request, body: MultiCityInput):
     return _sse(generate_multi_city(body))
 
 
 @app.post("/api/visa-check")
-async def visa_check_endpoint(body: VisaCheckInput):
+@limiter.limit("20/minute")
+async def visa_check_endpoint(request: Request, body: VisaCheckInput):
     """
     Returns structured visa requirements + cost for an Indian passport holder
     travelling to the specified country.
@@ -250,4 +312,4 @@ async def visa_check_endpoint(body: VisaCheckInput):
     try:
         return await check_visa(body)
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(status_code=500, detail=_safe_error(exc, "visa-check"))

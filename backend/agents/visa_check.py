@@ -15,14 +15,14 @@ from __future__ import annotations
 import json
 import re
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 
 
 class VisaCheckInput(BaseModel):
-    country: str
-    passport_nationality: str = "Indian"   # Indian citizen / Indian passport holder
+    country:              str = Field(..., min_length=1, max_length=100)
+    passport_nationality: str = Field(default="Indian", max_length=50)
 
 
 _SCHEMA = r"""{

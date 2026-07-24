@@ -20,6 +20,16 @@ import httpx
 SERPER_KEY = os.getenv("SERPER_API_KEY", "")
 EXA_KEY    = os.getenv("EXA_API_KEY", "")
 
+# Module-level singleton — created once, reused across requests (no per-call overhead)
+_exa_client: object | None = None
+
+def _get_exa():
+    global _exa_client
+    if _exa_client is None:
+        from exa_py import Exa
+        _exa_client = Exa(api_key=EXA_KEY)
+    return _exa_client
+
 
 async def serper_search(query: str, k: int = 5) -> list[dict[str, Any]]:
     """
@@ -71,12 +81,11 @@ async def exa_search(query: str, k: int = 5) -> list[dict[str, Any]]:
     if not EXA_KEY:
         return []
 
-    from exa_py import Exa  # lazy import — only needed when key is present
-
-    exa = Exa(api_key=EXA_KEY)
+    from exa_py import Exa  # noqa: F401 — type hint only
+    exa = _get_exa()
 
     # exa_py is sync; run in thread pool to avoid blocking the event loop
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()  # get_event_loop() is deprecated in 3.10+
     response = await loop.run_in_executor(
         None,
         lambda: exa.search_and_contents(

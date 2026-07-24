@@ -7,16 +7,16 @@ from __future__ import annotations
 import json
 import re
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 
 
 class FlightSearchInput(BaseModel):
-    origin: str        # "Bengaluru" / "BLR"
-    destination: str   # "Ho Chi Minh City" / "SGN"
-    date: str          # "YYYY-MM-DD"
-    passengers: int = 1
+    origin:      str = Field(..., min_length=1, max_length=100)
+    destination: str = Field(..., min_length=1, max_length=100)
+    date:        str = Field(..., max_length=10)
+    passengers:  int = Field(default=1, ge=1, le=9)
 
 
 _SCHEMA = """{
