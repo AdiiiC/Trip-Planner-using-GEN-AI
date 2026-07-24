@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
@@ -34,6 +34,10 @@ export const metadata: Metadata = {
     description: "Plan smarter trips with AI-powered itineraries, live prices, and visa info.",
   },
   manifest: "/manifest.json",
+};
+
+// themeColor must be in viewport export (not metadata) — Next.js 13.4+
+export const viewport: Viewport = {
   themeColor: "#6366f1",
 };
 
