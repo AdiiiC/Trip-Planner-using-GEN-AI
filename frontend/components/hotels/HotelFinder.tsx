@@ -7,6 +7,8 @@ import { Hotel, Search, Star, ExternalLink, Zap } from "lucide-react";
 import { api } from "@/lib/api";
 import type { HotelResult, HotelSearchResult } from "@/lib/types";
 import { formatINR, cn } from "@/lib/utils";
+import { SkeletonCard } from "@/components/ui/Skeleton";
+import { CityAutocomplete } from "@/components/ui/CityAutocomplete";
 
 const today = new Date().toISOString().slice(0, 10);
 const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
@@ -84,14 +86,8 @@ export function HotelFinder() {
       )}
 
       {mutation.isPending && (
-        <div className="glass rounded-2xl p-12 flex flex-col items-center gap-3">
-          <div className="flex gap-2">
-            {[0,1,2].map(i => (
-              <div key={i} className="w-3 h-3 rounded-full bg-indigo-400 animate-bounce"
-                style={{ animationDelay: `${i * 0.15}s` }} />
-            ))}
-          </div>
-          <p className="text-[#8892b0] text-sm">Searching Booking.com, MakeMyTrip, Agoda…</p>
+        <div className="grid sm:grid-cols-2 gap-4">
+          {[0,1,2,3].map(i => <SkeletonCard key={i} />)}
         </div>
       )}
 
@@ -142,9 +138,9 @@ function HotelCard({ hotel: h, isFirst, nights }: { hotel: HotelResult; isFirst:
         <div>
           <p className="text-white font-semibold">{h.name}</p>
           <div className="flex items-center gap-1 mt-0.5">
-            {Array.from({ length: h.stars || 0 }).map((_, i) => (
-              <Star key={i} className="w-3 h-3 text-amber-400 fill-amber-400" />
-            ))}
+            {Array.from({ length: 5 }).map((_, i) => (
+            <Star key={i} className={cn("w-3 h-3", i < (h.stars || 0) ? "fill-amber-400 text-amber-400" : "text-[#8892b0]")} />
+          ))}
             {h.area && h.area !== "null" && (
               <span className="text-xs text-[#8892b0] ml-1">{h.area}</span>
             )}

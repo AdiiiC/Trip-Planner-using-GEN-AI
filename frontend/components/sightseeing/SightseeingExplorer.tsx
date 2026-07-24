@@ -7,6 +7,8 @@ import { Search, Clock, MapPin, Ticket, Lightbulb, Route, ExternalLink } from "l
 import { api } from "@/lib/api";
 import type { Attraction, NearbyPlace, SightseeingResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { SkeletonCard } from "@/components/ui/Skeleton";
+import { CityAutocomplete } from "@/components/ui/CityAutocomplete";
 
 const CATEGORY_COLORS: Record<string, string> = {
   heritage:    "bg-amber-500/20 text-amber-300 border-amber-500/30",
@@ -59,12 +61,10 @@ export function SightseeingExplorer() {
       {/* Search bar */}
       <div className="glass rounded-2xl p-4 mb-6 flex gap-3 flex-wrap">
         <div className="flex-1 min-w-[160px]">
-          <input
+          <CityAutocomplete
             value={city}
-            onChange={e => setCity(e.target.value)}
-            onKeyDown={e => e.key === "Enter" && handleSearch()}
+            onChange={setCity}
             placeholder="City (e.g. Da Nang)"
-            className="input-dark"
           />
         </div>
         <div className="w-40">
@@ -185,19 +185,9 @@ export function SightseeingExplorer() {
         )}
 
         {mutation.isPending && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="glass rounded-2xl p-16 flex flex-col items-center text-center"
-          >
-            <div className="flex gap-2 mb-4">
-              {[0, 1, 2].map(i => (
-                <div key={i} className="w-3 h-3 rounded-full bg-indigo-400 animate-bounce"
-                  style={{ animationDelay: `${i * 0.15}s` }} />
-              ))}
-            </div>
-            <p className="text-[#8892b0] text-sm">Searching & structuring attraction data…</p>
-          </motion.div>
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[0,1,2,3,4,5].map(i => <SkeletonCard key={i} />)}
+          </div>
         )}
       </AnimatePresence>
     </div>

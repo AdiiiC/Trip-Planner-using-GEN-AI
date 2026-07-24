@@ -13,7 +13,9 @@ import { formatINR, formatUSD, formatNumber, cn } from "@/lib/utils";
 import { VisaBadge, VisaResultCard } from "@/components/visa/VisaCostChecker";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList,
 } from "recharts";
+import { useEffect, useRef, useState as useCountState } from "react";
 
 // ─── schema ───────────────────────────────────────────────────────────────────
 
@@ -497,13 +499,34 @@ function BudgetResults({ result }: { result: BudgetResult }) {
   const cc = result.cash_conversion;
   const gt = result.grand_total;
 
-  const pieData = [
-    { name: "Flights",       value: fc.flights.total_inr },
-    { name: "Stays",         value: fc.stays.total_inr },
-    { name: "Sightseeing",   value: fc.sightseeing.total_inr },
-    { name: "Extras",        value: fc.extras.total_inr },
-    { name: "Pocket Money",  value: cc.pocket_money_inr },
+  // Animated counter for grand total
+  const [displayedINR, setDisplayedINR] = useCountState(0);
+  const rafRef = useRef<number | null>(null);
+  useEffect(() => {
+    const target = gt.inr;
+    const duration = 1000;
+    const start = Date.now();
+    const animate = () => {
+      const elapsed = Date.now() - start;
+      const progress = Math.min(elapsed / duration, 1);
+      // ease-out cubic
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayedINR(Math.round(eased * target));
+      if (progress < 1) rafRef.current = requestAnimationFrame(animate);
+    };
+    rafRef.current = requestAnimationFrame(animate);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [gt.inr]);
+
+  const chartData = [
+    { name: "Flights",      value: fc.flights.total_inr },
+    { name: "Stays",        value: fc.stays.total_inr },
+    { name: "Sightseeing",  value: fc.sightseeing.total_inr },
+    { name: "Extras",       value: fc.extras.total_inr },
+    { name: "Pocket $",     value: cc.pocket_money_inr },
   ].filter(d => d.value > 0);
+
+  const pieData = chartData;
 
   return (
     <motion.div
@@ -511,20 +534,45 @@ function BudgetResults({ result }: { result: BudgetResult }) {
       animate={{ opacity: 1, y: 0 }}
       className="space-y-4"
     >
-      {/* Grand total */}
+      {/* Grand total — animated counter */}
       <div className="glass rounded-2xl p-6 border border-indigo-500/30">
         <p className="text-xs font-semibold uppercase tracking-wider text-[#8892b0] mb-1">Grand Total (Your Share)</p>
-        <p className="text-4xl font-bold gradient-text">{formatINR(gt.inr)}</p>
+        <p className="text-4xl font-bold gradient-text">{formatINR(displayedINR)}</p>
         <p className="text-[#8892b0] text-sm mt-1">≈ {formatUSD(gt.usd)}</p>
       </div>
 
-      {/* Pie chart */}
+      {/* Bar chart — horizontal breakdown */}
       <div className="glass rounded-2xl p-4">
         <p className="text-sm font-medium text-white mb-3">Breakdown</p>
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 40 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#1e2540" horizontal={false} />
+              <XAxis type="number" tick={false} axisLine={false} tickLine={false} />
+              <YAxis type="category" dataKey="name" tick={{ fill: "#8892b0", fontSize: 11 }} axisLine={false} tickLine={false} width={70} />
+              <Tooltip
+                formatter={(v) => formatINR(Number(v))}
+                contentStyle={{ background: "#131829", border: "1px solid #1e2540", borderRadius: 8, color: "#e8eaf6" }}
+                cursor={{ fill: "rgba(99,102,241,0.08)" }}
+              />
+              <Bar dataKey="value" radius={[0, 4, 4, 0]}>
+                {chartData.map((_, i) => (
+                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                ))}
+                <LabelList dataKey="value" position="right" formatter={(v: unknown) => formatINR(Number(v))} style={{ fill: "#e8eaf6", fontSize: 10 }} />
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </div>
+
+      {/* Pie chart */}
+      <div className="glass rounded-2xl p-4">
+        <p className="text-sm font-medium text-white mb-3">Share</p>
+        <div className="h-40">
+          <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={pieData} dataKey="value" cx="50%" cy="50%" outerRadius={70} paddingAngle={2}>
+              <Pie data={pieData} dataKey="value" cx="50%" cy="50%" outerRadius={60} paddingAngle={2}>
                 {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
               </Pie>
               <Tooltip

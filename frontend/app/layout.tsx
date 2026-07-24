@@ -6,6 +6,7 @@ import { Navbar } from "@/components/Navbar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PageTransition } from "@/components/PageTransition";
 import { CookieConsent } from "@/components/CookieConsent";
+import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -70,6 +71,12 @@ export default function RootLayout({
             </footer>
           </ErrorBoundary>
           <CookieConsent />
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              style: { background: "#131829", border: "1px solid #1e2540", color: "#e8eaf6" },
+            }}
+          />
         </Providers>
       </body>
     </html>

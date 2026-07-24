@@ -9,6 +9,7 @@ import {
   Globe, RefreshCw, Luggage, Shield, Send, Copy, Check,
   Download, Share2, BookOpen, Plus, Trash2, Cloud,
   Thermometer, Wind, Droplets, PlusCircle, ShieldCheck, Printer,
+  ChevronDown, ChevronUp, GripVertical,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
@@ -19,7 +20,18 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import confetti from "canvas-confetti";
 import { CityAutocomplete } from "@/components/ui/CityAutocomplete";
+import { BackToTop } from "@/components/ui/BackToTop";
+import { QRCodeButton } from "@/components/ui/QRCodeButton";
 import Image from "next/image";
+import {
+  DndContext, closestCenter, KeyboardSensor, PointerSensor,
+  useSensor, useSensors, DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext, sortableKeyboardCoordinates, useSortable,
+  verticalListSortingStrategy, arrayMove,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -120,6 +132,32 @@ function WeatherWidget({ city }: { city: string }) {
   );
 }
 
+// ─── sortable multi-city stop ─────────────────────────────────────────────────
+
+function SortableStop({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={isDragging ? "opacity-50" : ""}
+    >
+      <div className="flex items-start gap-2">
+        <button
+          type="button"
+          {...attributes}
+          {...listeners}
+          className="mt-3 text-[#8892b0] hover:text-white cursor-grab active:cursor-grabbing"
+          aria-label="Drag to reorder"
+        >
+          <GripVertical className="w-4 h-4" />
+        </button>
+        <div className="flex-1">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 // ─── recently searched hook ───────────────────────────────────────────────────
 
 const RECENT_KEY = "tripmind_recent_cities";
@@ -170,12 +208,11 @@ function useWikiHero(city: string) {
 
 function MarkdownWithDayCopy({ content }: { content: string }) {
   const [copiedDay, setCopiedDay] = useState<number | null>(null);
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
   const copiedDayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Clear timer on unmount to prevent setState on unmounted component
   useEffect(() => () => { if (copiedDayTimer.current) clearTimeout(copiedDayTimer.current); }, []);
 
-  // Split on ## Day headings while keeping the heading in each section
   const sections = useMemo(() => content.split(/(?=^## Day \d)/m), [content]);
 
   const copySection = (text: string, idx: number) => {
@@ -185,22 +222,55 @@ function MarkdownWithDayCopy({ content }: { content: string }) {
     copiedDayTimer.current = setTimeout(() => setCopiedDay(null), 2000);
   };
 
+  const toggleCollapse = (idx: number) =>
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      next.has(idx) ? next.delete(idx) : next.add(idx);
+      return next;
+    });
+
   return (
     <div>
       {sections.map((section, i) => {
         const isDaySection = /^## Day \d/m.test(section);
-        return (
-          <div key={i} className={isDaySection ? "relative group/day" : ""}>
-            {isDaySection && (
-              <button
-                onClick={() => copySection(section, i)}
-                className="absolute top-1 right-0 opacity-0 group-hover/day:opacity-100 transition-opacity flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[#8892b0] hover:text-white no-print"
+        const isCollapsed = collapsed.has(i);
+        const dayTitle = section.match(/^## (Day \d+[^\n]*)/m)?.[1];
+
+        if (isDaySection) {
+          return (
+            <div key={i} className="relative group/day border border-white/5 rounded-xl mb-3 overflow-hidden">
+              {/* Day header bar — click to collapse */}
+              <div
+                className="flex items-center justify-between px-3 py-2 bg-white/3 cursor-pointer hover:bg-white/5 transition-colors"
+                onClick={() => toggleCollapse(i)}
               >
-                {copiedDay === i
-                  ? <><Check className="w-3 h-3 text-emerald-400" /> Copied</>
-                  : <><Copy className="w-3 h-3" /> Copy day</>}
-              </button>
-            )}
+                <span className="text-indigo-300 font-semibold text-sm">{dayTitle}</span>
+                <div className="flex items-center gap-2 no-print">
+                  <button
+                    onClick={e => { e.stopPropagation(); copySection(section, i); }}
+                    className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[#8892b0] hover:text-white"
+                  >
+                    {copiedDay === i
+                      ? <><Check className="w-3 h-3 text-emerald-400" /> Copied</>
+                      : <><Copy className="w-3 h-3" /> Copy</>}
+                  </button>
+                  {isCollapsed
+                    ? <ChevronDown className="w-3.5 h-3.5 text-[#8892b0]" />
+                    : <ChevronUp className="w-3.5 h-3.5 text-[#8892b0]" />}
+                </div>
+              </div>
+              {!isCollapsed && (
+                <div className="px-3 pb-2 prose-trip text-sm">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {section.replace(/^## Day [^\n]+\n/, "")}
+                  </ReactMarkdown>
+                </div>
+              )}
+            </div>
+          );
+        }
+        return (
+          <div key={i} className="prose-trip text-sm">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{section}</ReactMarkdown>
           </div>
         );
@@ -231,6 +301,34 @@ export function TripPlanner() {
 
   const { trips, save, remove, load } = useTripHistory();
   const { cities: recentCities, addCity: addRecentCity } = useRecentCities();
+
+  // Ref for back-to-top scroll detection
+  const outputRef = useRef<HTMLDivElement>(null);
+
+  // DnD sensors for multi-city drag reorder
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  // Cmd/Ctrl + Enter submits the active form
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        e.preventDefault();
+        if (mode === "plan" || mode === "packing" || mode === "visa") {
+          handleSubmit(onSingleSubmit)();
+        } else if (mode === "multi") {
+          multiForm.handleSubmit(onMultiSubmit)();
+        } else if (mode === "insurance") {
+          insuranceForm.handleSubmit(onInsuranceSubmit)();
+        }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode]);
 
   // ── single-city form ─────────────────────────────────────────────────────
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<SingleForm>({
@@ -297,7 +395,16 @@ export function TripPlanner() {
       (e) => { setError(e.message); setStreaming(false); }
     );
   }
-
+  // ── multi-city drag reorder ──────────────────────────────────────────────
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (over && active.id !== over.id) {
+      const oldIndex = stopFields.findIndex(f => f.id === active.id);
+      const newIndex = stopFields.findIndex(f => f.id === over.id);
+      const current = multiForm.getValues("stops");
+      multiForm.setValue("stops", arrayMove(current, oldIndex, newIndex));
+    }
+  };
   // ── single submit ────────────────────────────────────────────────────────
   const onSingleSubmit = (v: SingleForm) => {
     addRecentCity(v.city);
@@ -524,8 +631,11 @@ export function TripPlanner() {
           {mode === "multi" && (
             <form onSubmit={multiForm.handleSubmit(onMultiSubmit)} className="glass rounded-2xl p-5 space-y-4">
               <p className="text-sm font-medium text-white">City Stops</p>
-              {stopFields.map((f, i) => (
-                <div key={f.id} className="rounded-xl bg-white/3 border border-white/5 p-3 space-y-2">
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={stopFields.map(f => f.id)} strategy={verticalListSortingStrategy}>
+                  {stopFields.map((f, i) => (
+                    <SortableStop key={f.id} id={f.id}>
+                      <div className="rounded-xl bg-white/3 border border-white/5 p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-medium text-indigo-300">Stop {i + 1}</span>
                     {stopFields.length > 2 && (
@@ -558,7 +668,10 @@ export function TripPlanner() {
                       {...multiForm.register(`stops.${i}.notes`)} />
                   </div>
                 </div>
-              ))}
+              </SortableStop>
+            ))}
+                </SortableContext>
+              </DndContext>
               <button type="button"
                 onClick={() => append({ city: "", days: 2, date: today, notes: "" })}
                 className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 text-sm transition-colors">
@@ -639,7 +752,7 @@ export function TripPlanner() {
         </div>
 
         {/* ══ Right: output ════════════════════════════════════════════════ */}
-        <div className="glass rounded-2xl flex flex-col min-h-[600px]">
+        <div className="glass rounded-2xl flex flex-col min-h-[600px] relative">
           {/* Tab bar */}
           <div className="flex gap-1 p-3 border-b border-[#1e2540] flex-wrap">
             {(["output", "refine", "history"] as const).map(tab => (
@@ -662,12 +775,14 @@ export function TripPlanner() {
                 <ActionBtn icon={Printer} label="Print" onClick={handlePrint} />
                 <ActionBtn icon={BookOpen} label="Save" onClick={handleSave} />
                 <ActionBtn icon={shared ? Check : Share2} label={shared ? "Copied!" : "Share"} active={shared} onClick={handleShare} />
+                {output && <QRCodeButton url={buildShareUrl(city, days, output)} title={`${city || "Trip"} · ${days}d`} />}
               </div>
             )}
           </div>
 
           {/* Content area */}
-          <div className="flex-1 overflow-auto p-5">
+          <div ref={outputRef} className="flex-1 overflow-auto p-5">
+            <BackToTop scrollRef={outputRef} />
             {/* ── Output tab ── */}
             {activeTab === "output" && (
               <>
