@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -170,6 +170,10 @@ function useWikiHero(city: string) {
 
 function MarkdownWithDayCopy({ content }: { content: string }) {
   const [copiedDay, setCopiedDay] = useState<number | null>(null);
+  const copiedDayTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Clear timer on unmount to prevent setState on unmounted component
+  useEffect(() => () => { if (copiedDayTimer.current) clearTimeout(copiedDayTimer.current); }, []);
 
   // Split on ## Day headings while keeping the heading in each section
   const sections = useMemo(() => content.split(/(?=^## Day \d)/m), [content]);
@@ -177,7 +181,8 @@ function MarkdownWithDayCopy({ content }: { content: string }) {
   const copySection = (text: string, idx: number) => {
     navigator.clipboard.writeText(text);
     setCopiedDay(idx);
-    setTimeout(() => setCopiedDay(null), 2000);
+    if (copiedDayTimer.current) clearTimeout(copiedDayTimer.current);
+    copiedDayTimer.current = setTimeout(() => setCopiedDay(null), 2000);
   };
 
   return (
@@ -215,6 +220,14 @@ export function TripPlanner() {
   const [copied, setCopied]     = useState(false);
   const [shared, setShared]     = useState(false);
   const [activeTab, setActiveTab] = useState<"output" | "refine" | "history">("output");
+
+  // Timer refs — cleared on unmount to prevent setState on unmounted component
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sharedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => {
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    if (sharedTimer.current) clearTimeout(sharedTimer.current);
+  }, []);
 
   const { trips, save, remove, load } = useTripHistory();
   const { cities: recentCities, addCity: addRecentCity } = useRecentCities();
@@ -323,7 +336,8 @@ export function TripPlanner() {
   const handleCopy = () => {
     navigator.clipboard.writeText(output);
     setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopied(false), 2000);
   };
 
   const handleDownload = () => {
@@ -352,7 +366,8 @@ export function TripPlanner() {
     // Fallback: copy to clipboard
     navigator.clipboard.writeText(url);
     setShared(true);
-    setTimeout(() => setShared(false), 3000);
+    if (sharedTimer.current) clearTimeout(sharedTimer.current);
+    sharedTimer.current = setTimeout(() => setShared(false), 3000);
   };
 
   const handleSave = () => {
