@@ -104,8 +104,8 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
     allow_credentials=False,
-    allow_methods=["GET", "POST"],
-    allow_headers=["Content-Type"],
+    allow_methods=["*"],       # OPTIONS preflight must be allowed
+    allow_headers=["*"],
 )
 
 # ── debug mode (never enable in production) ───────────────────────────────────
