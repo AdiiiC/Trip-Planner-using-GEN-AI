@@ -72,28 +72,24 @@ async def search_flights(inp: FlightSearchInput) -> dict:
     sources: list[str] = []
 
     try:
-        from langchain_community.tools.tavily_search import TavilySearchResults
+        from agents.search import serper_search
 
-        # Primary: target Skyscanner.co.in + skyscanner.net
-        sky_search = TavilySearchResults(
-            max_results=5,
-            include_domains=["skyscanner.co.in", "skyscanner.net"],
-        )
+        # Primary: Skyscanner-targeted Google search
         q1 = (
+            f"site:skyscanner.co.in OR site:skyscanner.net "
             f"one way flight {inp.origin} to {inp.destination} "
             f"{inp.date} {inp.passengers} passenger check-in baggage price INR"
         )
-        r1 = await sky_search.ainvoke(q1)
+        r1 = await serper_search(q1, k=5)
 
-        # Supplementary: broader search to fill gaps
-        broad_search = TavilySearchResults(max_results=4)
+        # Supplementary: broader Google search for more fare data
         q2 = (
-            f"skyscanner.co.in {inp.origin} {inp.destination} one way "
-            f"check-in baggage included INR {inp.date}"
+            f"{inp.origin} to {inp.destination} one way flight {inp.date} "
+            f"check-in baggage included cheapest fare INR"
         )
-        r2 = await broad_search.ainvoke(q2)
+        r2 = await serper_search(q2, k=4)
 
-        all_results = list(r1 or []) + list(r2 or [])
+        all_results = r1 + r2
         raw_text = "\n\n".join(
             r.get("content", "") for r in all_results if isinstance(r, dict)
         )[:4500]
@@ -105,7 +101,7 @@ async def search_flights(inp: FlightSearchInput) -> dict:
 
     except Exception:
         raw_text = (
-            "Tavily search unavailable. "
+            "Search unavailable. "
             "Use your trained knowledge of typical flight prices for this route."
         )
 

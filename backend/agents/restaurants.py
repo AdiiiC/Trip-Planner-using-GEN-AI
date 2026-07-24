@@ -55,13 +55,12 @@ async def find_restaurants(inp: RestaurantInput) -> dict:
     sources: list[str] = []
 
     try:
-        from langchain_community.tools.tavily_search import TavilySearchResults
+        from agents.search import exa_search
 
-        search = TavilySearchResults(max_results=6)
         cuisine_kw = "" if inp.cuisine == "any" else inp.cuisine
-        budget_kw = "" if inp.budget == "any" else inp.budget
-        q = f"best {cuisine_kw} {budget_kw} restaurants {inp.city} price range must try 2025"
-        results = await search.ainvoke(q)
+        budget_kw  = "" if inp.budget  == "any" else inp.budget
+        q = f"best {cuisine_kw} {budget_kw} restaurants in {inp.city} with price range must-try dishes opening hours"
+        results = await exa_search(q, k=6)
 
         raw_text = "\n\n".join(
             r.get("content", "") for r in results if isinstance(r, dict)

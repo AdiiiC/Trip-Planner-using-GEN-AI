@@ -70,18 +70,15 @@ async def search_hotels(inp: HotelSearchInput) -> dict:
     sources: list[str] = []
 
     try:
-        from langchain_community.tools.tavily_search import TavilySearchResults
+        from agents.search import serper_search
 
-        search = TavilySearchResults(
-            max_results=5,
-            include_domains=["booking.com", "makemytrip.com", "hotels.com", "agoda.com"],
-        )
         tier_kw = "" if inp.budget_tier == "any" else inp.budget_tier
         q = (
             f"{tier_kw} hotel {inp.city} {inp.check_in} to {inp.check_out} "
-            f"{inp.guests} guest price INR per night"
+            f"{inp.guests} guest price INR per night "
+            f"site:booking.com OR site:agoda.com OR site:makemytrip.com"
         )
-        results = await search.ainvoke(q)
+        results = await serper_search(q, k=5)
 
         raw_text = "\n\n".join(
             r.get("content", "") for r in results if isinstance(r, dict)

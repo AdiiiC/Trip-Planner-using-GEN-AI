@@ -23,15 +23,15 @@ async def explore_sightseeing(inp: SightseeingInput) -> dict:
     sources: list[str] = []
 
     try:
-        from langchain_community.tools.tavily_search import TavilySearchResults
+        from agents.search import exa_search
 
-        search = TavilySearchResults(max_results=5)
-
-        att_results = await search.ainvoke(
-            f"{location} top tourist attractions entry fee ticket price 2025"
+        att_results = await exa_search(
+            f"{location} top tourist attractions sightseeing entry fee ticket price tips",
+            k=5,
         )
-        nb_results = await search.ainvoke(
-            f"day trips near {location} within 2 hours places worth visiting entry fee"
+        nb_results = await exa_search(
+            f"best day trips near {location} within 2 hours worth visiting entry fee how to get there",
+            k=4,
         )
 
         attractions_text = "\n".join(
@@ -47,7 +47,7 @@ async def explore_sightseeing(inp: SightseeingInput) -> dict:
         ][:6]
 
     except Exception:
-        # Tavily not configured – rely on LLM knowledge
+        # Search unavailable – rely on LLM knowledge
         attractions_text = f"Use your trained knowledge about {location}."
         nearby_text = f"Use your trained knowledge about places near {location}."
 

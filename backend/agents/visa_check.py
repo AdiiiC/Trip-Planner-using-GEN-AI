@@ -77,14 +77,13 @@ async def check_visa(inp: VisaCheckInput) -> dict:
     sources: list[str] = []
 
     try:
-        from langchain_community.tools.tavily_search import TavilySearchResults
+        from agents.search import serper_search
 
-        search = TavilySearchResults(max_results=4)
         q = (
             f"Indian passport {inp.country} visa requirements 2025 "
-            f"e-visa fee cost arrival card"
+            f"e-visa fee cost arrival card official"
         )
-        results = await search.ainvoke(q)
+        results = await serper_search(q, k=4)
         search_text = "\n\n".join(
             r.get("content", "") for r in results if isinstance(r, dict)
         )[:3500]
