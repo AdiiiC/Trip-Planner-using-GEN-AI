@@ -5,6 +5,7 @@ import { Providers } from "./providers";
 import { Navbar } from "@/components/Navbar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PageTransition } from "@/components/PageTransition";
+import { CookieConsent } from "@/components/CookieConsent";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -54,7 +55,17 @@ export default function RootLayout({
             <main className="flex-1">
               <PageTransition>{children}</PageTransition>
             </main>
+            <footer className="border-t border-[#1e2540] py-4 no-print">
+              <div className="max-w-7xl mx-auto px-4 flex items-center justify-between flex-wrap gap-2 text-xs text-[#8892b0]">
+                <span>© {new Date().getFullYear()} TripMind. AI-generated content — always verify before booking.</span>
+                <div className="flex gap-4">
+                  <a href="/privacy" className="hover:text-indigo-400 transition-colors">Privacy</a>
+                  <a href="/terms" className="hover:text-indigo-400 transition-colors">Terms</a>
+                </div>
+              </div>
+            </footer>
           </ErrorBoundary>
+          <CookieConsent />
         </Providers>
       </body>
     </html>

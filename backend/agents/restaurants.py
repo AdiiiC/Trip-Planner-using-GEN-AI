@@ -70,20 +70,17 @@ async def find_restaurants(inp: RestaurantInput) -> dict:
     except Exception:
         raw_text = f"Use your trained knowledge of restaurants in {inp.city}."
 
-    llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-versatile", max_retries=3, timeout=60)
+    llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-versatile", max_retries=3, timeout=60,
+                    model_kwargs={"response_format": {"type": "json_object"}})
     response = llm.invoke(
         _prompt.format_messages(city=inp.city, cuisine=inp.cuisine, budget=inp.budget, text=raw_text)
     )
 
-    raw = re.sub(r"```[a-z]*\n?", "", response.content.strip()).strip()
+    # JSON mode guarantees valid JSON — no regex fallback needed
     try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        m = re.search(r"\{.*\}", raw, re.DOTALL)
-        try:
-            data = json.loads(m.group()) if m else {}
-        except Exception:
-            data = {"restaurants": []}
+        data = json.loads(response.content)
+    except (json.JSONDecodeError, AttributeError):
+        data = {"restaurants": []}
 
     data["sources"] = sources
     return data

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useMutation } from "@tanstack/react-query";
 import { Plane, Search, Luggage, Clock, Zap, ExternalLink, ArrowRight } from "lucide-react";
+import Image from "next/image";
 import { api } from "@/lib/api";
 import type { FlightResult, FlightSearchResult } from "@/lib/types";
 import { formatINR, cn } from "@/lib/utils";
@@ -259,12 +260,14 @@ function FlightCard({ flight: f, isFirst, rank }: { flight: FlightResult; isFirs
             {(() => {
               const logo = getAirlineLogo(f.airline);
               return logo ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
+                <Image
                   src={logo}
                   alt={f.airline}
-                  className="w-6 h-6 rounded object-contain bg-white p-0.5"
-                  onError={e => (e.currentTarget.style.display = "none")}
+                  width={24}
+                  height={24}
+                  unoptimized
+                  className="rounded object-contain bg-white p-0.5"
+                  onError={e => ((e.target as HTMLImageElement).style.display = "none")}
                 />
               ) : null;
             })()}

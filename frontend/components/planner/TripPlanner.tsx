@@ -19,6 +19,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import confetti from "canvas-confetti";
 import { CityAutocomplete } from "@/components/ui/CityAutocomplete";
+import Image from "next/image";
 
 const today = new Date().toISOString().slice(0, 10);
 
@@ -676,14 +677,15 @@ export function TripPlanner() {
                       <motion.div
                         initial={{ opacity: 0, scale: 1.02 }}
                         animate={{ opacity: 1, scale: 1 }}
-                        className="mb-5 rounded-xl overflow-hidden h-40 w-full"
+                        className="relative mb-5 rounded-xl overflow-hidden h-40 w-full"
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
+                        <Image
                           src={heroUrl}
                           alt={city}
-                          className="w-full h-full object-cover"
-                          onError={e => (e.currentTarget.style.display = "none")}
+                          fill
+                          className="object-cover"
+                          unoptimized
+                          onError={e => ((e.target as HTMLImageElement).style.display = "none")}
                         />
                       </motion.div>
                     )}

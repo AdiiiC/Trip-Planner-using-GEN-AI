@@ -1,12 +1,35 @@
 import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
 
+// Content Security Policy — blocks XSS, clickjacking, and MIME sniffing
+const cspHeader = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",          // Next.js requires both
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https://upload.wikimedia.org https://commons.wikimedia.org https://logo.clearbit.com",
+  "connect-src 'self' https://*.sentry.io https://wft-geo-db.p.rapidapi.com https://photon.komoot.io https://en.wikipedia.org https://app.posthog.com https://us.i.posthog.com",
+  "font-src 'self' data:",
+  "frame-src 'none'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
+
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "upload.wikimedia.org" },
+      { protocol: "https", hostname: "commons.wikimedia.org" },
       { protocol: "https", hostname: "logo.clearbit.com" },
     ],
+  },
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [{ key: "Content-Security-Policy", value: cspHeader }],
+      },
+    ];
   },
 };
 

@@ -92,7 +92,8 @@ async def check_visa(inp: VisaCheckInput) -> dict:
     except Exception:
         search_text = "No search results — use your trained knowledge."
 
-    llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-versatile", max_retries=3, timeout=60)
+    llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-versatile", max_retries=3, timeout=60,
+                    model_kwargs={"response_format": {"type": "json_object"}})
     response = llm.invoke(
         _prompt.format_messages(
             country=inp.country,
@@ -101,15 +102,11 @@ async def check_visa(inp: VisaCheckInput) -> dict:
         )
     )
 
-    raw = re.sub(r"```[a-z]*\n?", "", response.content.strip()).strip()
+    # JSON mode guarantees valid JSON — no regex fallback needed
     try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        m = re.search(r"\{.*\}", raw, re.DOTALL)
-        try:
-            data = json.loads(m.group()) if m else {}
-        except Exception:
-            data = {"visa_type": "unknown", "is_free": False, "cost_usd": 0}
+        data = json.loads(response.content)
+    except (json.JSONDecodeError, AttributeError):
+        data = {"visa_type": "unknown", "is_free": False, "cost_usd": 0}
 
     data["sources"] = sources
     return data

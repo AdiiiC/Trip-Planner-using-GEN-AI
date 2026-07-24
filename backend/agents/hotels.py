@@ -88,7 +88,8 @@ async def search_hotels(inp: HotelSearchInput) -> dict:
     except Exception:
         raw_text = "Use your trained knowledge of typical hotel prices in this city."
 
-    llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-versatile", max_retries=3, timeout=60)
+    llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-versatile", max_retries=3, timeout=60,
+                    model_kwargs={"response_format": {"type": "json_object"}})
     response = llm.invoke(
         _prompt.format_messages(
             city=inp.city,
@@ -102,15 +103,11 @@ async def search_hotels(inp: HotelSearchInput) -> dict:
         )
     )
 
-    raw = re.sub(r"```[a-z]*\n?", "", response.content.strip()).strip()
+    # JSON mode guarantees valid JSON — no regex fallback needed
     try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        m = re.search(r"\{.*\}", raw, re.DOTALL)
-        try:
-            data = json.loads(m.group()) if m else {}
-        except Exception:
-            data = {"results": [], "note": "Could not parse hotel data."}
+        data = json.loads(response.content)
+    except (json.JSONDecodeError, AttributeError):
+        data = {"results": [], "note": "Could not parse hotel data."}
 
     data["sources"] = sources
     return data

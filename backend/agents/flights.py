@@ -105,7 +105,8 @@ async def search_flights(inp: FlightSearchInput) -> dict:
             "Use your trained knowledge of typical flight prices for this route."
         )
 
-    llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-versatile", max_retries=3, timeout=60)
+    llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-versatile", max_retries=3, timeout=60,
+                    model_kwargs={"response_format": {"type": "json_object"}})
     response = llm.invoke(
         _structuring_prompt.format_messages(
             origin=inp.origin,
@@ -116,15 +117,11 @@ async def search_flights(inp: FlightSearchInput) -> dict:
         )
     )
 
-    raw = re.sub(r"```[a-z]*\n?", "", response.content.strip()).strip()
+    # JSON mode guarantees valid JSON — no regex fallback needed
     try:
-        data = json.loads(raw)
-    except json.JSONDecodeError:
-        m = re.search(r"\{.*\}", raw, re.DOTALL)
-        try:
-            data = json.loads(m.group()) if m else {}
-        except Exception:
-            data = {"results": [], "note": "Could not parse flight data."}
+        data = json.loads(response.content)
+    except (json.JSONDecodeError, AttributeError):
+        data = {"results": [], "note": "Could not parse flight data."}
 
     data["sources"] = sources
     return data
