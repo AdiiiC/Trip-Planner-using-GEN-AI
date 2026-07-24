@@ -6,8 +6,9 @@ Unified search helpers.
 - exa_search()     →  Neural semantic search via Exa
                       Best for: rich destination content, restaurant guides, attraction info
 
-Both return list[dict] with 'content' and 'url' keys —
-drop-in compatible with the old TavilySearchResults shape.
+Both return list[dict] with 'content' and 'url' keys.
+Results are cached in-memory for 10 minutes to avoid redundant API calls.
+Tenacity retries on transient HTTP/timeout errors (3 attempts, exponential backoff).
 """
 from __future__ import annotations
 
@@ -16,12 +17,21 @@ import os
 from typing import Any
 
 import httpx
+from tenacity import (
+    retry,
+    retry_if_exception_type,
+    stop_after_attempt,
+    wait_exponential,
+)
+
+from agents.cache import search_cache
 
 SERPER_KEY = os.getenv("SERPER_API_KEY", "")
 EXA_KEY    = os.getenv("EXA_API_KEY", "")
 
-# Module-level singleton — created once, reused across requests (no per-call overhead)
+# Module-level Exa singleton — created once, reused across requests
 _exa_client: object | None = None
+
 
 def _get_exa():
     global _exa_client
@@ -31,15 +41,16 @@ def _get_exa():
     return _exa_client
 
 
-async def serper_search(query: str, k: int = 5) -> list[dict[str, Any]]:
-    """
-    Google search via Serper.dev.
-    Returns up to k results as [{"content": str, "url": str}].
-    Returns [] silently if SERPER_API_KEY is not set.
-    """
-    if not SERPER_KEY:
-        return []
+# ── Serper ───────────────────────────────────────────────────────────────────
 
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=8),
+    retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.TimeoutException)),
+    reraise=True,
+)
+async def _serper_fetch(query: str, k: int) -> list[dict[str, Any]]:
+    """Inner fetch — retried on HTTP errors/timeouts."""
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
             "https://google.serper.dev/search",
@@ -54,16 +65,13 @@ async def serper_search(query: str, k: int = 5) -> list[dict[str, Any]]:
 
     results: list[dict[str, Any]] = []
 
-    # Google's rich answer box at the top
     if ab := data.get("answerBox"):
         snippet = ab.get("answer") or ab.get("snippet") or ""
         if snippet:
             results.append({"content": snippet, "url": ab.get("link", "")})
 
-    # Organic results
     for item in data.get("organic", [])[:k]:
         content = item.get("snippet", "")
-        # Append any sitelink snippets for richer context
         for sl in (item.get("sitelinks") or [])[:3]:
             if sl.get("snippet"):
                 content += " " + sl["snippet"]
@@ -72,29 +80,39 @@ async def serper_search(query: str, k: int = 5) -> list[dict[str, Any]]:
     return results[:k]
 
 
-async def exa_search(query: str, k: int = 5) -> list[dict[str, Any]]:
+async def serper_search(query: str, k: int = 5) -> list[dict[str, Any]]:
     """
-    Neural semantic search via Exa (exa.ai).
-    Returns up to k results as [{"content": str, "url": str}].
-    Returns [] silently if EXA_API_KEY is not set.
+    Google search via Serper.dev. Results cached 10 min.
+    Returns [] silently if SERPER_API_KEY is not set.
     """
-    if not EXA_KEY:
+    if not SERPER_KEY:
         return []
 
-    from exa_py import Exa  # noqa: F401 — type hint only
+    cache_key = search_cache.make_key("serper", query, str(k))
+    if cached := search_cache.get(cache_key):
+        return cached  # type: ignore[return-value]
+
+    results = await _serper_fetch(query, k)
+    search_cache.set(cache_key, results)
+    return results
+
+
+# ── Exa ──────────────────────────────────────────────────────────────────────
+
+@retry(
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=1, max=8),
+    retry=retry_if_exception_type(Exception),
+    reraise=True,
+)
+def _exa_fetch_sync(query: str, k: int) -> list[dict[str, Any]]:
+    """Inner sync fetch — retried on any error."""
     exa = _get_exa()
-
-    # exa_py is sync; run in thread pool to avoid blocking the event loop
-    loop = asyncio.get_running_loop()  # get_event_loop() is deprecated in 3.10+
-    response = await loop.run_in_executor(
-        None,
-        lambda: exa.search_and_contents(
-            query,
-            num_results=k,
-            text={"max_characters": 900},
-        ),
+    response = exa.search_and_contents(
+        query,
+        num_results=k,
+        text={"max_characters": 900},
     )
-
     return [
         {
             "content": (r.text or r.title or "").strip(),
@@ -103,3 +121,21 @@ async def exa_search(query: str, k: int = 5) -> list[dict[str, Any]]:
         for r in (response.results or [])
         if r.text or r.title
     ]
+
+
+async def exa_search(query: str, k: int = 5) -> list[dict[str, Any]]:
+    """
+    Neural semantic search via Exa. Results cached 10 min.
+    Returns [] silently if EXA_API_KEY is not set.
+    """
+    if not EXA_KEY:
+        return []
+
+    cache_key = search_cache.make_key("exa", query, str(k))
+    if cached := search_cache.get(cache_key):
+        return cached  # type: ignore[return-value]
+
+    loop = asyncio.get_running_loop()
+    results = await loop.run_in_executor(None, lambda: _exa_fetch_sync(query, k))
+    search_cache.set(cache_key, results)
+    return results

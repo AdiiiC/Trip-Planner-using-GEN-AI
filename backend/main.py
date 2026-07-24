@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import uuid
 from typing import AsyncIterator
 
 import httpx
@@ -66,6 +67,18 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         response.headers["Permissions-Policy"] = "geolocation=(), microphone=()"
         return response
 
+
+class RequestIDMiddleware(BaseHTTPMiddleware):
+    """Echoes or generates a X-Request-ID header for every response.
+    Makes it easy to correlate client errors with Render/server logs."""
+    async def dispatch(self, request: Request, call_next) -> Response:
+        req_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = req_id
+        return response
+
+
+app.add_middleware(RequestIDMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 # ── CORS — configurable via ALLOWED_ORIGINS env var ──────────────────────────
@@ -110,7 +123,18 @@ def _sse(stream: AsyncIterator[str]) -> StreamingResponse:
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok"}
+    """Returns service health + which integrations are configured.
+    Used by Render health checks and UptimeRobot monitoring."""
+    services = {
+        "groq":   bool(os.getenv("GROQ_API_KEY")),
+        "serper": bool(os.getenv("SERPER_API_KEY")),
+        "exa":    bool(os.getenv("EXA_API_KEY")),
+    }
+    return {
+        "status":   "ok" if all(services.values()) else "degraded",
+        "version":  "2.0.0",
+        "services": services,
+    }
 
 
 @app.post("/api/budget")

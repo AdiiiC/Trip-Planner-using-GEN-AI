@@ -1,16 +1,17 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 
 
 class SightseeingInput(BaseModel):
-    city: str
-    country: str = ""
+    city:    str = Field(..., min_length=1, max_length=100)
+    country: str = Field(default="", max_length=100)
 
 
 async def explore_sightseeing(inp: SightseeingInput) -> dict:
@@ -25,13 +26,16 @@ async def explore_sightseeing(inp: SightseeingInput) -> dict:
     try:
         from agents.search import exa_search
 
-        att_results = await exa_search(
-            f"{location} top tourist attractions sightseeing entry fee ticket price tips",
-            k=5,
-        )
-        nb_results = await exa_search(
-            f"best day trips near {location} within 2 hours worth visiting entry fee how to get there",
-            k=4,
+        # Run both Exa searches concurrently — halves response time
+        att_results, nb_results = await asyncio.gather(
+            exa_search(
+                f"{location} top tourist attractions sightseeing entry fee ticket price tips",
+                k=5,
+            ),
+            exa_search(
+                f"best day trips near {location} within 2 hours worth visiting entry fee how to get there",
+                k=4,
+            ),
         )
 
         attractions_text = "\n".join(

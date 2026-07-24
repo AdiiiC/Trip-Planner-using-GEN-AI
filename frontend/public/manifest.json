@@ -1,0 +1,14 @@
+{
+  "name": "TripMind — AI Trip Planner",
+  "short_name": "TripMind",
+  "description": "AI-powered trip planning — itineraries, flights, hotels, restaurants, visa info",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c0f1a",
+  "theme_color": "#6366f1",
+  "orientation": "portrait-primary",
+  "categories": ["travel", "productivity"],
+  "icons": [
+    { "src": "/favicon.ico", "sizes": "48x48", "type": "image/x-icon" }
+  ]
+}

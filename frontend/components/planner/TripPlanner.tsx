@@ -332,8 +332,23 @@ export function TripPlanner() {
 
   const handlePrint = () => window.print();
 
-  const handleShare = () => {
+  const handleShare = async () => {
     const url = buildShareUrl(city, days, output);
+    // Use native share sheet on mobile (WhatsApp, Messages, etc.)
+    if (typeof navigator !== "undefined" && navigator.share) {
+      try {
+        await navigator.share({
+          title: `${city || "Trip"} — ${days}-day itinerary`,
+          text: `Check out this AI-generated ${days}-day trip plan for ${city}!`,
+          url,
+        });
+        return;
+      } catch (e) {
+        // User cancelled or share failed — fall through to clipboard
+        if ((e as Error).name === "AbortError") return;
+      }
+    }
+    // Fallback: copy to clipboard
     navigator.clipboard.writeText(url);
     setShared(true);
     setTimeout(() => setShared(false), 3000);

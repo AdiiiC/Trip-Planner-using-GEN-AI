@@ -26,6 +26,29 @@ const BASE =
     ? ""        // same-origin fallback when self-hosted
     : "http://localhost:8000");
 
+// ── sessionStorage TTL cache (10 min) ────────────────────────────────────────
+// Prevents identical queries from re-hitting the backend within a session.
+
+const CACHE_TTL = 10 * 60 * 1000;
+
+function getCached<T>(key: string): T | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (!raw) return null;
+    const { value, ts } = JSON.parse(raw) as { value: T; ts: number };
+    if (Date.now() - ts > CACHE_TTL) { sessionStorage.removeItem(key); return null; }
+    return value;
+  } catch { return null; }
+}
+
+function setCached(key: string, value: unknown): void {
+  if (typeof window === "undefined") return;
+  try {
+    sessionStorage.setItem(key, JSON.stringify({ value, ts: Date.now() }));
+  } catch { /* sessionStorage full or unavailable — silently ignore */ }
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 async function post<T>(path: string, body: unknown): Promise<T> {
@@ -39,6 +62,16 @@ async function post<T>(path: string, body: unknown): Promise<T> {
     throw new Error(err.detail ?? res.statusText);
   }
   return res.json() as Promise<T>;
+}
+
+/** Cached POST — returns sessionStorage hit if fresh, else fetches + caches. */
+async function postCached<T>(path: string, body: unknown): Promise<T> {
+  const key = `tripmind_cache:${path}:${JSON.stringify(body)}`;
+  const cached = getCached<T>(key);
+  if (cached !== null) return cached;
+  const result = await post<T>(path, body);
+  setCached(key, result);
+  return result;
 }
 
 /**
@@ -92,9 +125,11 @@ async function consumeSSE(
 // ── public API ───────────────────────────────────────────────────────────────
 
 export const api = {
+  // Budget is user-specific (different values every time) — no cache needed
   calculateBudget: (body: BudgetInput) =>
     post<BudgetResult>("/api/budget", body),
 
+  // ── Streaming (never cached) ──────────────────────────────────────────────
   planTrip: (
     body: PlanInput,
     onChunk: (t: string) => void,
@@ -123,28 +158,6 @@ export const api = {
     onError: (e: Error) => void
   ) => consumeSSE("/api/visa", body, onChunk, onDone, onError),
 
-  getSightseeing: (city: string, country = "") =>
-    post<SightseeingResult>("/api/sightseeing", { city, country }),
-
-  getForexRates: async (): Promise<Record<string, number>> => {
-    const res = await fetch(`${BASE}/api/forex?base=INR`);
-    if (!res.ok) return {};
-    const data = await res.json();
-    return data.rates ?? {};
-  },
-
-  searchFlights: (body: FlightSearchInput) =>
-    post<FlightSearchResult>("/api/flights", body),
-
-  searchHotels: (body: HotelSearchInput) =>
-    post<HotelSearchResult>("/api/hotels", body),
-
-  findRestaurants: (body: RestaurantInput) =>
-    post<RestaurantResult>("/api/restaurants", body),
-
-  getWeather: (body: WeatherInput) =>
-    post<WeatherResult>("/api/weather", body),
-
   estimateInsurance: (
     body: InsuranceInput,
     onChunk: (t: string) => void,
@@ -159,6 +172,34 @@ export const api = {
     onError: (e: Error) => void
   ) => consumeSSE("/api/multi-city", body, onChunk, onDone, onError),
 
+  // ── Cached (10 min sessionStorage TTL) ───────────────────────────────────
+  getSightseeing: (city: string, country = "") =>
+    postCached<SightseeingResult>("/api/sightseeing", { city, country }),
+
+  searchFlights: (body: FlightSearchInput) =>
+    postCached<FlightSearchResult>("/api/flights", body),
+
+  searchHotels: (body: HotelSearchInput) =>
+    postCached<HotelSearchResult>("/api/hotels", body),
+
+  findRestaurants: (body: RestaurantInput) =>
+    postCached<RestaurantResult>("/api/restaurants", body),
+
+  getWeather: (body: WeatherInput) =>
+    postCached<WeatherResult>("/api/weather", body),
+
   checkVisa: (body: VisaCheckInput) =>
-    post<VisaCheckResult>("/api/visa-check", body),
+    postCached<VisaCheckResult>("/api/visa-check", body),
+
+  getForexRates: async (): Promise<Record<string, number>> => {
+    const key = "tripmind_cache:/api/forex:{}";
+    const cached = getCached<Record<string, number>>(key);
+    if (cached !== null) return cached;
+    const res = await fetch(`${BASE}/api/forex?base=INR`);
+    if (!res.ok) return {};
+    const data = await res.json();
+    const rates = data.rates ?? {};
+    setCached(key, rates);
+    return rates;
+  },
 };
