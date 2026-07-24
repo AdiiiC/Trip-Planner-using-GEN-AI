@@ -93,18 +93,14 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 app.add_middleware(RequestIDMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
-# ── CORS — configurable via ALLOWED_ORIGINS env var ──────────────────────────
-# Production: set ALLOWED_ORIGINS=https://your-app.vercel.app in Render
-# Development: defaults to * (all origins)
-
-_raw_origins = os.getenv("ALLOWED_ORIGINS", "*")
-ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",")]
-
+# ── CORS ─────────────────────────────────────────────────────────────────────
+# allow_origins=["*"] — CORS origin restriction is a browser hint, not real security.
+# Real protection is: rate limiting + server-side API keys + input validation.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=ALLOWED_ORIGINS,
+    allow_origins=["*"],
     allow_credentials=False,
-    allow_methods=["*"],       # OPTIONS preflight must be allowed
+    allow_methods=["*"],
     allow_headers=["*"],
 )
 
