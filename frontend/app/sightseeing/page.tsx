@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { SightseeingExplorer } from "@/components/sightseeing/SightseeingExplorer";
+import { BestTimeWidget } from "@/components/ui/BestTimeWidget";
 
 export const metadata: Metadata = {
   title: "Sightseeing Explorer",
@@ -8,5 +9,12 @@ export const metadata: Metadata = {
 };
 
 export default function SightseeingPage() {
-  return <SightseeingExplorer />;
+  return (
+    <>
+      <SightseeingExplorer />
+      <div className="max-w-7xl mx-auto px-4 pb-12">
+        <BestTimeWidget />
+      </div>
+    </>
+  );
 }

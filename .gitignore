@@ -16,6 +16,10 @@ build/
 backend/.env
 .env
 .env.local
+# any env variant files (.env-backend, .env.local-frontend, .env.sentry-*, etc.)
+.env*
+!.env.example
+!.env.local.example
 
 # Node / Next.js
 frontend/node_modules/

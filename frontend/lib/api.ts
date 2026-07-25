@@ -208,4 +208,43 @@ export const api = {
     setCached(key, rates);
     return rates;
   },
+
+  // ── New feature endpoints ────────────────────────────────────────────────
+  convertCurrency: (amount: number, from: string, to: string) =>
+    post<{
+      amount: number; from: string; to: string; converted: number;
+      amount_inr: number; rate: number; inverse_rate: number;
+    }>("/api/currency-convert", { amount, from_currency: from, to_currency: to }),
+
+  extractCosts: (itinerary: string, currency = "USD") =>
+    post<{
+      items: { name: string; category: string; amount: number; currency: string }[];
+      total_estimate: number; currency: string;
+    }>("/api/extract-costs", { itinerary, currency }),
+
+  optimizeRoute: (stops: { city: string; lat: number; lng: number }[], fixedStart = true) =>
+    post<{
+      ordered_cities: string[];
+      legs: { from: string; to: string; distance_km: number }[];
+      total_distance_km: number;
+    }>("/api/optimize-route", { stops, fixed_start: fixedStart }),
+
+  bestTime: (destination: string) =>
+    postCached<{
+      destination: string;
+      months: { month: string; score: number; weather: string; crowds: string; note: string }[];
+      best_months: string[]; avoid_months: string[]; summary: string;
+    }>("/api/best-time", { destination }),
+
+  exportIcs: async (title: string, startDate: string,
+    events: { title: string; day: number; start_time: string; duration_min: number; location?: string; notes?: string }[]
+  ): Promise<Blob> => {
+    const res = await fetch(`${BASE}/api/export/ics`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ title, start_date: startDate, events }),
+    });
+    if (!res.ok) throw new Error("Export failed");
+    return res.blob();
+  },
 };

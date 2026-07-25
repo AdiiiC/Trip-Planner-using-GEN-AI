@@ -51,6 +51,11 @@ from agents.restaurants import RestaurantInput, find_restaurants
 from agents.sightseeing import SightseeingInput, explore_sightseeing
 from agents.visa_check import VisaCheckInput, check_visa
 from agents.weather import WeatherInput, get_weather
+from agents.currency import ConvertInput, convert_currency
+from agents.extract_costs import ExtractCostsInput, extract_costs
+from agents.route import OptimizeRouteInput, optimize_route
+from agents.export import ExportInput, build_ics
+from agents.best_time import BestTimeInput, best_time_to_visit
 
 # ── logging ──────────────────────────────────────────────────────────────────
 
@@ -479,3 +484,79 @@ async def visa_check_endpoint(request: Request, body: VisaCheckInput):
         return await check_visa(body)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=_safe_error(exc, "visa-check"))
+
+
+# ── New feature endpoints ─────────────────────────────────────────────────────
+
+@app.post("/api/currency-convert")
+@limiter.limit("60/minute")
+async def currency_convert_endpoint(request: Request, body: ConvertInput):
+    """Convert an amount between two currencies using live Orient Exchange rates."""
+    rates = await _scrape_orient_rates() or {}
+    if not rates:
+        # fall back to forex endpoint's inverted rates
+        try:
+            async with httpx.AsyncClient(timeout=8) as client:
+                resp = await client.get("https://api.exchangerate-api.com/v4/latest/INR")
+                raw = resp.json().get("rates", {})
+                rates = {k: round(1 / v, 6) for k, v in raw.items() if v}
+        except Exception:
+            rates = {}
+    try:
+        return convert_currency(body, rates)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=_safe_error(exc, "currency-convert"))
+
+
+@app.post("/api/extract-costs")
+@limiter.limit("15/minute")
+async def extract_costs_endpoint(request: Request, body: ExtractCostsInput):
+    """Extract structured cost line-items from an itinerary (itinerary -> budget)."""
+    try:
+        return await extract_costs(body)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=_safe_error(exc, "extract-costs"))
+
+
+@app.post("/api/optimize-route")
+@limiter.limit("30/minute")
+async def optimize_route_endpoint(request: Request, body: OptimizeRouteInput):
+    """Order multi-city stops to minimise total travel distance."""
+    try:
+        return optimize_route(body)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=_safe_error(exc, "optimize-route"))
+
+
+@app.post("/api/best-time")
+@limiter.limit("20/minute")
+async def best_time_endpoint(request: Request, body: BestTimeInput):
+    """Month-by-month best-time-to-visit scores for a destination."""
+    cache_key = search_cache.make_key("best-time", body.destination.lower())
+    cached = search_cache.get(cache_key)
+    if cached:
+        return cached
+    try:
+        result = await best_time_to_visit(body)
+        search_cache.set(cache_key, result)
+        return result
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=_safe_error(exc, "best-time"))
+
+
+@app.post("/api/export/ics")
+@limiter.limit("30/minute")
+async def export_ics_endpoint(request: Request, body: ExportInput):
+    """Return an iCalendar (.ics) file for the trip events."""
+    try:
+        ics = build_ics(body)
+        filename = f"{body.title.replace(' ', '-').lower()[:40] or 'trip'}.ics"
+        return Response(
+            content=ics,
+            media_type="text/calendar",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=_safe_error(exc, "export-ics"))

@@ -6,6 +6,8 @@ import { Navbar } from "@/components/Navbar";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PageTransition } from "@/components/PageTransition";
 import { CookieConsent } from "@/components/CookieConsent";
+import { CommandPalette } from "@/components/CommandPalette";
+import { AuroraBackground } from "@/components/ui/AuroraBackground";
 import { Toaster } from "sonner";
 
 const geistSans = Geist({
@@ -55,6 +57,8 @@ export default function RootLayout({
     >
       <body className="min-h-full flex flex-col bg-[#0c0f1a]">
         <Providers>
+          <AuroraBackground />
+          <CommandPalette />
           <Navbar />
           <ErrorBoundary>
             <main className="flex-1">
