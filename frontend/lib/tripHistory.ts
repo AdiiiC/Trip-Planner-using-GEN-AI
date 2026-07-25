@@ -5,6 +5,10 @@ import type { SavedTrip } from "./types";
 
 const STORAGE_KEY = "tripmind_history";
 
+function persistToStorage(updated: SavedTrip[]) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
+}
+
 export function useTripHistory() {
   const [trips, setTrips] = useState<SavedTrip[]>([]);
 
@@ -16,11 +20,7 @@ export function useTripHistory() {
     } catch {}
   }, []);
 
-  const persist = (updated: SavedTrip[]) => {
-    setTrips(updated);
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
-  };
-
+  // BUG-011 fix: functional state updates avoid stale closure
   const save = useCallback((city: string, days: number, itinerary: string) => {
     const trip: SavedTrip = {
       id: Date.now().toString(),
@@ -30,17 +30,33 @@ export function useTripHistory() {
       itinerary,
       savedAt: new Date().toISOString(),
     };
-    persist([trip, ...trips].slice(0, 20)); // keep last 20
+    setTrips(prev => {
+      const updated = [trip, ...prev].slice(0, 20);
+      persistToStorage(updated);
+      return updated;
+    });
     return trip.id;
-  }, [trips]);
+  }, []); // no deps — functional update reads latest state
 
   const remove = useCallback((id: string) => {
-    persist(trips.filter(t => t.id !== id));
-  }, [trips]);
+    setTrips(prev => {
+      const updated = prev.filter(t => t.id !== id);
+      persistToStorage(updated);
+      return updated;
+    });
+  }, []);
 
   const load = useCallback((id: string) => {
-    return trips.find(t => t.id === id);
-  }, [trips]);
+    // Read directly from storage to avoid stale state
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) {
+        const all: SavedTrip[] = JSON.parse(raw);
+        return all.find(t => t.id === id);
+      }
+    } catch {}
+    return undefined;
+  }, []);
 
   return { trips, save, remove, load };
 }

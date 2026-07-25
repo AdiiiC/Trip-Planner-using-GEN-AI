@@ -67,21 +67,31 @@ app = FastAPI(title="Trip Planner API", version="2.0.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-# ── request body size limit (1 MB) ───────────────────────────────────────────
-# Prevents oversized payloads from reaching route handlers
-from starlette.middleware.trustedhost import TrustedHostMiddleware  # noqa: F401 — not used but kept
-try:
-    from starlette.middleware import Middleware  # noqa: F401
-except ImportError:
-    pass
 
 @app.middleware("http")
 async def _limit_body_size(request: Request, call_next):
+    """BUG-003: handles both Content-Length and chunked transfer encoding."""
     max_bytes = 1 * 1024 * 1024  # 1 MB
-    if request.headers.get("content-length"):
-        if int(request.headers["content-length"]) > max_bytes:
-            from fastapi.responses import JSONResponse
-            return JSONResponse(status_code=413, content={"detail": "Request body too large (max 1 MB)"})
+
+    # Fast path — Content-Length header present
+    cl = request.headers.get("content-length")
+    if cl and int(cl) > max_bytes:
+        from fastapi.responses import JSONResponse
+        return JSONResponse(status_code=413, content={"detail": "Request body too large (max 1 MB)"})
+
+    # Slow path — chunked encoding (no Content-Length); buffer and enforce limit
+    if not cl and request.method in ("POST", "PUT", "PATCH"):
+        body = b""
+        async for chunk in request.stream():
+            body += chunk
+            if len(body) > max_bytes:
+                from fastapi.responses import JSONResponse
+                return JSONResponse(status_code=413, content={"detail": "Request body too large (max 1 MB)"})
+        # Cache the consumed body so route handlers can still read it
+        async def _cached_receive():
+            return {"type": "http.request", "body": body, "more_body": False}
+        request._receive = _cached_receive  # type: ignore[attr-defined]
+
     return await call_next(request)
 
 
@@ -109,7 +119,9 @@ async def _verify_captcha(token: str) -> bool:
             )
             return resp.json().get("success", False)
     except Exception:
-        return True  # network error — fail open (don't block real users)
+        return True  # network error — fail open (don't block legitimate users)
+                     # BUG-009: determined attackers can bypass by blocking api.hcaptcha.com
+                     # Mitigation: keep rate limiting as primary defence
 
 
 @app.middleware("http")

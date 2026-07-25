@@ -20,10 +20,23 @@ from typing import Any
 import httpx
 from tenacity import (
     retry,
+    retry_if_exception,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
+
+
+def _is_retryable_exa_error(exc: BaseException) -> bool:
+    """BUG-008: don't retry rate-limit errors — they won't resolve with a fast retry."""
+    for attr in ("status_code", "status"):
+        code = getattr(exc, attr, None)
+        if code == 429:
+            return False
+    resp = getattr(exc, "response", None)
+    if resp is not None and getattr(resp, "status_code", None) == 429:
+        return False
+    return True
 
 from agents.cache import search_cache
 
@@ -106,7 +119,7 @@ async def serper_search(query: str, k: int = 5) -> list[dict[str, Any]]:
 @retry(
     stop=stop_after_attempt(3),
     wait=wait_exponential(multiplier=1, min=1, max=8),
-    retry=retry_if_exception_type(Exception),
+    retry=retry_if_exception(_is_retryable_exa_error),  # BUG-008: skip 429 retries
     reraise=True,
 )
 def _exa_fetch_sync(query: str, k: int) -> list[dict[str, Any]]:

@@ -4,7 +4,7 @@ import os
 from datetime import date
 from typing import AsyncIterator
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -69,7 +69,25 @@ class PlanInput(BaseModel):
     travel_style: str = Field(default="balanced", pattern="^(relaxed|balanced|adventurous|family-friendly)$")
     dietary:      str = Field(default="none", max_length=200)
     travel_date:  str = Field(default=str(date.today()), max_length=10)
-    currency:     str = Field(default="USD", max_length=3)
+    currency:     str = Field(default="USD", pattern=r"^[A-Za-z]{3}$")  # BUG-013
+
+    @field_validator("interests", mode="before")  # BUG-005: per-item length
+    @classmethod
+    def limit_interest_item_length(cls, v: list) -> list:
+        for item in (v or []):
+            if isinstance(item, str) and len(item) > 200:
+                raise ValueError("Each interest must be at most 200 characters")
+        return v
+
+    @field_validator("travel_date", mode="after")  # BUG-006: valid ISO date
+    @classmethod
+    def validate_travel_date(cls, v: str) -> str:
+        if v:
+            try:
+                date.fromisoformat(v)
+            except ValueError:
+                raise ValueError("travel_date must be a valid date (YYYY-MM-DD)")
+        return v
 
 
 class RefineInput(BaseModel):
@@ -83,6 +101,24 @@ class PackingInput(BaseModel):
     travel_style: str = Field(default="balanced", max_length=50)
     interests:    list[str] = Field(default=[], max_length=30)
     travel_date:  str = Field(default=str(date.today()), max_length=10)
+
+    @field_validator("interests", mode="before")
+    @classmethod
+    def limit_interest_item_length(cls, v: list) -> list:
+        for item in (v or []):
+            if isinstance(item, str) and len(item) > 200:
+                raise ValueError("Each interest must be at most 200 characters")
+        return v
+
+    @field_validator("travel_date", mode="after")
+    @classmethod
+    def validate_travel_date(cls, v: str) -> str:
+        if v:
+            try:
+                date.fromisoformat(v)
+            except ValueError:
+                raise ValueError("travel_date must be a valid date (YYYY-MM-DD)")
+        return v
 
 
 class VisaInput(BaseModel):
@@ -160,7 +196,15 @@ class MultiCityInput(BaseModel):
     budget:       str = Field(default="medium", pattern="^(low|medium|luxury)$")
     travel_style: str = Field(default="balanced", max_length=50)
     dietary:      str = Field(default="none", max_length=200)
-    currency:     str = Field(default="USD", max_length=3)
+    currency:     str = Field(default="USD", pattern=r"^[A-Za-z]{3}$")
+
+    @field_validator("interests", mode="before")
+    @classmethod
+    def limit_interest_item_length(cls, v: list) -> list:
+        for item in (v or []):
+            if isinstance(item, str) and len(item) > 200:
+                raise ValueError("Each interest must be at most 200 characters")
+        return v
 
 
 _multi_prompt = ChatPromptTemplate.from_messages([

@@ -1,51 +1,55 @@
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
+import math
+from pydantic import BaseModel, Field, field_validator
 from typing import Literal
+
+_CURRENCY_RE = r"^[A-Za-z]{2,4}$"
+_MAX_MONEY   = 1e12   # sanity cap: no single item > 1 trillion INR
 
 
 # ──────────────────────────────────────────────
-# Input models
+# Input models — all monetary fields validated
 # ──────────────────────────────────────────────
 
 class ExchangeRate(BaseModel):
-    currency: str          # "USD", "MYR", "VND", …
-    rate_to_inr: float     # 1 <currency> = N INR
+    currency:    str   = Field(..., min_length=2, max_length=4, pattern=_CURRENCY_RE)
+    rate_to_inr: float = Field(..., gt=0, lt=_MAX_MONEY)   # BUG-001/002: must be positive finite
 
 
 class FlightCost(BaseModel):
-    route: str             # "BLR → SGN"
-    price_inr: float
-    per_person: bool = True
+    route:      str   = Field(..., min_length=1, max_length=200)
+    price_inr:  float = Field(..., ge=0, lt=_MAX_MONEY)    # BUG-007: no negatives
+    per_person: bool  = True
 
 
 class AccommodationCost(BaseModel):
-    destination: str
-    total_cost_inr: float
+    destination:    str   = Field(..., min_length=1, max_length=100)
+    total_cost_inr: float = Field(..., ge=0, lt=_MAX_MONEY)
     split_type: Literal["individual", "group"] = "group"
 
 
 class ItemCost(BaseModel):
-    name: str
-    destination: str = ""
-    amount: float
-    currency: str = "INR"
+    name:        str   = Field(..., min_length=1, max_length=200)
+    destination: str   = Field(default="", max_length=100)
+    amount:      float = Field(..., ge=0, lt=_MAX_MONEY)
+    currency:    str   = Field(default="INR", min_length=2, max_length=4, pattern=_CURRENCY_RE)
 
 
 class CashConversion(BaseModel):
-    currency: str
-    amount_inr: float   # INR taken from pocket money to convert
+    currency:   str   = Field(..., min_length=2, max_length=4, pattern=_CURRENCY_RE)
+    amount_inr: float = Field(..., ge=0, lt=_MAX_MONEY)
 
 
 class BudgetInput(BaseModel):
-    travelers: int = Field(default=1, ge=1, le=50)
-    exchange_rates: list[ExchangeRate] = []
-    flights: list[FlightCost] = []
-    accommodations: list[AccommodationCost] = []
-    sightseeing: list[ItemCost] = []
-    extras: list[ItemCost] = []          # SIM, visa, insurance …
-    pocket_money_usd: float = 0.0
-    cash_conversions: list[CashConversion] = []
+    travelers:      int   = Field(default=1, ge=1, le=50)
+    exchange_rates: list[ExchangeRate]    = Field(default=[], max_length=20)   # BUG-004
+    flights:        list[FlightCost]      = Field(default=[], max_length=20)
+    accommodations: list[AccommodationCost] = Field(default=[], max_length=20)
+    sightseeing:    list[ItemCost]        = Field(default=[], max_length=30)
+    extras:         list[ItemCost]        = Field(default=[], max_length=20)
+    pocket_money_usd: float = Field(default=0.0, ge=0, lt=1_000_000)
+    cash_conversions: list[CashConversion] = Field(default=[], max_length=15)
 
 
 # ──────────────────────────────────────────────
@@ -59,7 +63,10 @@ def calculate_budget(inp: BudgetInput) -> dict:
     usd_rate = rates.get("USD", 83.0)
 
     def to_inr(amount: float, currency: str) -> float:
-        return amount * rates.get(currency, 1.0)
+        rate = rates.get(currency, 1.0)
+        if rate <= 0 or not math.isfinite(rate):   # BUG-001: guard zero/inf/nan
+            rate = 1.0
+        return amount * rate
 
     # ── 1. Flights ──────────────────────────────
     flight_items, total_flights = [], 0.0
@@ -74,7 +81,7 @@ def calculate_budget(inp: BudgetInput) -> dict:
             per_person = s.total_cost_inr
             label = "Individual"
         else:
-            per_person = s.total_cost_inr / inp.travelers
+            per_person = s.total_cost_inr / max(inp.travelers, 1)  # BUG-001: guard /0
             label = f"÷{inp.travelers}"
         stay_items.append({
             "destination": s.destination,
@@ -113,7 +120,10 @@ def calculate_budget(inp: BudgetInput) -> dict:
     pocket_money_inr = inp.pocket_money_usd * usd_rate
     cash_items, total_cash_out = [], 0.0
     for c in inp.cash_conversions:
-        foreign = c.amount_inr / rates.get(c.currency, 1.0)
+        rate = rates.get(c.currency, 1.0)
+        if rate <= 0 or not math.isfinite(rate):   # BUG-001: guard zero rate
+            rate = 1.0
+        foreign = c.amount_inr / rate
         cash_items.append({
             "currency": c.currency,
             "inr_spent": round(c.amount_inr, 2),
