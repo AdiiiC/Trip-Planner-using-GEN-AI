@@ -53,3 +53,9 @@ export function useOptimizeRoute() {
       api.optimizeRoute(stops),
   });
 }
+
+export function usePredictCash() {
+  return useMutation({
+    mutationFn: (body: Parameters<typeof api.predictCash>[0]) => api.predictCash(body),
+  });
+}

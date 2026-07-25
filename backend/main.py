@@ -57,6 +57,7 @@ from agents.extract_costs import ExtractCostsInput, extract_costs
 from agents.route import OptimizeRouteInput, optimize_route
 from agents.export import ExportInput, build_ics
 from agents.best_time import BestTimeInput, best_time_to_visit
+from agents.cash_predict import CashPredictInput, predict_cash
 
 # ── logging ──────────────────────────────────────────────────────────────────
 
@@ -546,6 +547,16 @@ async def best_time_endpoint(request: Request, body: BestTimeInput):
         return result
     except Exception as exc:
         raise HTTPException(status_code=500, detail=_safe_error(exc, "best-time"))
+
+
+@app.post("/api/cash-predict")
+@limiter.limit("20/minute")
+async def cash_predict_endpoint(request: Request, body: CashPredictInput):
+    """Predict how much physical cash (USD) to carry for the whole trip."""
+    try:
+        return await predict_cash(body)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=_safe_error(exc, "cash-predict"))
 
 
 @app.post("/api/export/ics")

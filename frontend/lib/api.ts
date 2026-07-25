@@ -236,6 +236,26 @@ export const api = {
       best_months: string[]; avoid_months: string[]; summary: string;
     }>("/api/best-time", { destination }),
 
+  predictCash: (body: {
+    destinations: string[];
+    duration_days: number;
+    travelers?: number;
+    travel_style?: string;
+    prepaid_usd?: number;
+    daily_budget_hint_usd?: number;
+  }) =>
+    post<{
+      recommended_cash_usd: number;
+      range_low_usd: number;
+      range_high_usd: number;
+      per_person_usd: number;
+      per_day_usd: number;
+      breakdown: { category: string; usd: number; note: string }[];
+      card_vs_cash: string;
+      tips: string[];
+      summary: string;
+    }>("/api/cash-predict", body),
+
   exportIcs: async (title: string, startDate: string,
     events: { title: string; day: number; start_time: string; duration_min: number; location?: string; notes?: string }[]
   ): Promise<Blob> => {

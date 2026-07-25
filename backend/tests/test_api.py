@@ -100,3 +100,13 @@ def test_currency_convert_validation_error():
 def test_optimize_route_requires_two_stops():
     r = client.post("/api/optimize-route", json={"stops": [{"city": "X", "lat": 0, "lng": 0}]})
     assert r.status_code == 422
+
+
+def test_cash_predict_requires_destination():
+    r = client.post("/api/cash-predict", json={"destinations": [], "duration_days": 5})
+    assert r.status_code == 422  # min_length=1 violation
+
+
+def test_cash_predict_validates_duration():
+    r = client.post("/api/cash-predict", json={"destinations": ["Bali"], "duration_days": 0})
+    assert r.status_code == 422  # ge=1 violation
