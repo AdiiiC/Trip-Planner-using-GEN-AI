@@ -539,12 +539,12 @@ export function TripPlanner() {
         {/* ══ Left: forms ══════════════════════════════════════════════════ */}
         <div className="space-y-4">
 
-          {/* Mode selector */}
-          <div className="glass rounded-xl p-1 grid grid-cols-5 gap-0.5">
+          {/* Mode selector — scrollable on narrow screens */}
+          <div className="glass rounded-xl p-1 flex gap-0.5 overflow-x-auto scrollbar-hide">
             {MODES.map(({ id, label, icon: Icon }) => (
               <button key={id} type="button" onClick={() => setMode(id)}
                 className={cn(
-                  "flex flex-col items-center justify-center gap-0.5 py-2 rounded-lg text-[10px] font-medium transition-colors",
+                  "flex flex-col items-center justify-center gap-0.5 py-2 px-3 rounded-lg text-[10px] font-medium transition-colors shrink-0 min-w-[60px]",
                   mode === id ? "bg-indigo-600 text-white" : "text-[#8892b0] hover:text-white"
                 )}>
                 <Icon className="w-3.5 h-3.5" />{label}
@@ -752,7 +752,7 @@ export function TripPlanner() {
         </div>
 
         {/* ══ Right: output ════════════════════════════════════════════════ */}
-        <div className="glass rounded-2xl flex flex-col min-h-[600px] relative">
+        <div className="glass rounded-2xl flex flex-col min-h-[350px] md:min-h-[600px] relative">
           {/* Tab bar */}
           <div className="flex gap-1 p-3 border-b border-[#1e2540] flex-wrap">
             {(["output", "refine", "history"] as const).map(tab => (
@@ -767,9 +767,9 @@ export function TripPlanner() {
               </button>
             ))}
 
-            {/* Action buttons */}
+            {/* Action buttons — scrollable on mobile */}
             {output && (
-              <div className="ml-auto flex gap-1 flex-wrap no-print">
+              <div className="ml-auto flex gap-1 no-print overflow-x-auto">
                 <ActionBtn icon={copied ? Check : Copy} label={copied ? "Copied" : "Copy"} active={copied} onClick={handleCopy} />
                 <ActionBtn icon={Download} label="Download" onClick={handleDownload} />
                 <ActionBtn icon={Printer} label="Print" onClick={handlePrint} />

@@ -8,6 +8,7 @@ import { api } from "@/lib/api";
 import type { Restaurant, RestaurantResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { CityAutocomplete } from "@/components/ui/CityAutocomplete";
+import { SkeletonCard } from "@/components/ui/Skeleton";
 
 function StarRating({ rating }: { rating: string }) {
   const num = parseFloat(rating);
@@ -99,14 +100,8 @@ export function RestaurantFinder() {
       </div>
 
       {mutation.isPending && (
-        <div className="glass rounded-2xl p-12 flex flex-col items-center gap-3">
-          <div className="flex gap-2">
-            {[0,1,2].map(i => (
-              <div key={i} className="w-3 h-3 rounded-full bg-indigo-400 animate-bounce"
-                style={{ animationDelay: `${i * 0.15}s` }} />
-            ))}
-          </div>
-          <p className="text-[#8892b0] text-sm">Searching for top restaurants…</p>
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[0,1,2,3,4,5].map(i => <SkeletonCard key={i} />)}
         </div>
       )}
 

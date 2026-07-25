@@ -16,7 +16,8 @@ class SightseeingInput(BaseModel):
 
 async def explore_sightseeing(inp: SightseeingInput) -> dict:
     location = f"{inp.city}, {inp.country}".strip(", ")
-    llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-versatile", max_retries=3, timeout=60)
+    llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-versatile", max_retries=3, timeout=60,
+                    model_kwargs={"response_format": {"type": "json_object"}})
 
     # Try Tavily search first; fall back to LLM knowledge if unavailable
     attractions_text = ""
@@ -114,19 +115,12 @@ async def explore_sightseeing(inp: SightseeingInput) -> dict:
         )
     )
 
+    # JSON mode guarantees valid JSON — regex fallback kept as safety net
     raw = response.content.strip()
-    # Strip any accidental markdown fences
-    raw = re.sub(r"```[a-z]*\n?", "", raw).strip()
-
     try:
         data = json.loads(raw)
-    except json.JSONDecodeError:
-        # Attempt to extract JSON object substring
-        match = re.search(r"\{.*\}", raw, re.DOTALL)
-        try:
-            data = json.loads(match.group()) if match else {}
-        except Exception:
-            data = {}
+    except (json.JSONDecodeError, AttributeError):
+        data = {}
 
     return {
         "city": location,

@@ -67,6 +67,23 @@ app = FastAPI(title="Trip Planner API", version="2.0.0")
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+# ── request body size limit (1 MB) ───────────────────────────────────────────
+# Prevents oversized payloads from reaching route handlers
+from starlette.middleware.trustedhost import TrustedHostMiddleware  # noqa: F401 — not used but kept
+try:
+    from starlette.middleware import Middleware  # noqa: F401
+except ImportError:
+    pass
+
+@app.middleware("http")
+async def _limit_body_size(request: Request, call_next):
+    max_bytes = 1 * 1024 * 1024  # 1 MB
+    if request.headers.get("content-length"):
+        if int(request.headers["content-length"]) > max_bytes:
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=413, content={"detail": "Request body too large (max 1 MB)"})
+    return await call_next(request)
+
 # ── security headers middleware ───────────────────────────────────────────────
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
