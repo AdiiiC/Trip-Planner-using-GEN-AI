@@ -114,7 +114,8 @@ export function CityAutocomplete({
           onChange={handleInput}
           onFocus={() => options.length > 0 && setOpen(true)}
           placeholder={placeholder}
-          className={cn("input-dark pl-8", className)}
+          className={cn("input-dark", className)}
+          style={{ paddingLeft: "2rem" }}
           autoComplete="off"
         />
         {loading && (
