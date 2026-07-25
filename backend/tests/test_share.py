@@ -54,6 +54,18 @@ def test_get_share_nonexistent_returns_404(session):
     assert r.status_code == 404
 
 
+def test_get_share_10hex_not_in_store_returns_404(session):
+    # Valid regex format but not in store
+    r = session.get(f"{BASE_URL}/api/share/aaaaaaaaaa", timeout=10)
+    assert r.status_code == 404
+
+
+def test_get_share_invalid_regex_returns_404(session):
+    # Non-hex should be rejected fast by new regex guard
+    r = session.get(f"{BASE_URL}/api/share/bad_id0000", timeout=10)
+    assert r.status_code == 404
+
+
 def test_share_persists_across_requests(session, created_share):
     # Second GET works — persistence via JSON store
     r1 = session.get(f"{BASE_URL}/api/share/{created_share['id']}", timeout=10)

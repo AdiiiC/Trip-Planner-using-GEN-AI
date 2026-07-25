@@ -6,7 +6,11 @@ import type { SavedTrip } from "./types";
 const STORAGE_KEY = "tripmind_history";
 
 function persistToStorage(updated: SavedTrip[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(updated)); } catch {}
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+  } catch (e) {
+    console.debug("Trip history: unable to persist to localStorage", e);
+  }
 }
 
 export function useTripHistory() {
@@ -17,7 +21,9 @@ export function useTripHistory() {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) setTrips(JSON.parse(raw));
-    } catch {}
+    } catch (e) {
+      console.debug("Trip history: unable to read from localStorage", e);
+    }
   }, []);
 
   // BUG-011 fix: functional state updates avoid stale closure
@@ -54,7 +60,9 @@ export function useTripHistory() {
         const all: SavedTrip[] = JSON.parse(raw);
         return all.find(t => t.id === id);
       }
-    } catch {}
+    } catch (e) {
+      console.debug("Trip history: unable to load from localStorage", e);
+    }
     return undefined;
   }, []);
 

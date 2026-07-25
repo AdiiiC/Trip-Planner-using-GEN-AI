@@ -38,8 +38,13 @@ async function fetchCityPhoto(city: string, country: string): Promise<string | n
   }
 }
 
-export default async function Image({ params }: { params: { id: string } }) {
-  const share = await fetchShare(params.id);
+export default async function Image({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const share = await fetchShare(id);
 
   const title = share?.title ?? "Wayfare — Shared Trip";
   const city = share?.city ?? "";

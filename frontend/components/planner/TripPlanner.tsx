@@ -240,14 +240,20 @@ function useRecentCities() {
     try {
       const raw = localStorage.getItem(RECENT_KEY);
       if (raw) setCities(JSON.parse(raw));
-    } catch {}
+    } catch (e) {
+      console.debug("Recent cities: unable to read from localStorage", e);
+    }
   }, []);
 
   const addCity = useCallback((city: string) => {
     if (!city.trim()) return;
     setCities(prev => {
       const updated = [city, ...prev.filter(c => c !== city)].slice(0, 6);
-      try { localStorage.setItem(RECENT_KEY, JSON.stringify(updated)); } catch {}
+      try {
+        localStorage.setItem(RECENT_KEY, JSON.stringify(updated));
+      } catch (e) {
+        console.debug("Recent cities: unable to persist to localStorage", e);
+      }
       return updated;
     });
   }, []);
@@ -561,14 +567,26 @@ export function TripPlanner() {
         }
       }
       // Fallback: copy to clipboard + toast
-      await navigator.clipboard.writeText(url);
-      toast.success("Public link copied", {
-        description: url,
-        action: {
-          label: "Open",
-          onClick: () => window.open(url, "_blank"),
-        },
-      });
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.success("Public link copied", {
+          description: url,
+          action: {
+            label: "Open",
+            onClick: () => window.open(url, "_blank"),
+          },
+        });
+      } catch {
+        // Clipboard permission denied (headless / insecure origin) — show the URL in the toast
+        toast.success("Public link ready", {
+          description: url,
+          action: {
+            label: "Open",
+            onClick: () => window.open(url, "_blank"),
+          },
+          duration: 8000,
+        });
+      }
       setShared(true);
       if (sharedTimer.current) clearTimeout(sharedTimer.current);
       sharedTimer.current = setTimeout(() => setShared(false), 3000);
@@ -580,8 +598,10 @@ export function TripPlanner() {
       setShared(true);
       if (sharedTimer.current) clearTimeout(sharedTimer.current);
       sharedTimer.current = setTimeout(() => setShared(false), 3000);
-      // Log for debugging but don't crash UI
-      console.warn("Share failed:", e);
+      // Non-critical: log for debugging in dev only
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("Share (backend) failed, using fragment URL:", e);
+      }
     }
   };
 

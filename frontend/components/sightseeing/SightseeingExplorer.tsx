@@ -106,11 +106,15 @@ export function SightseeingExplorer() {
               {result.sources.length > 0 && (
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="text-xs text-[var(--fg-muted)]">Sources:</span>
-                  {result.sources.slice(0, 3).map((s, i) => {
+                  {result.sources.slice(0, 3).map((s) => {
                     let domain = "";
-                    try { domain = new URL(s).hostname.replace("www.", ""); } catch {}
+                    try {
+                      domain = new URL(s).hostname.replace("www.", "");
+                    } catch {
+                      // Malformed source URL — skip silently
+                    }
                     return domain ? (
-                      <a key={i} href={s} target="_blank" rel="noopener noreferrer"
+                      <a key={s} href={s} target="_blank" rel="noopener noreferrer"
                         className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded-full px-2 py-0.5">
                         {domain} <ExternalLink className="w-2.5 h-2.5" />
                       </a>
