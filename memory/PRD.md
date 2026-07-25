@@ -45,3 +45,15 @@ None (no auth in this app).
 - Replace native `<input type="date">` in HotelFinder with shadcn Calendar + Popover
 - Deeper design pass on TripPlanner form controls (mode selector, quick examples)
 - Silence dev-only CSP cloudflare beacon block + font preload warnings
+
+## Follow-up iteration 3 (2026-01-25)
+### Delivered
+- **Real Groq + Serper wired**: /api/health now groq:true, serper:true. /api/plan streams live SSE content in <1s first chunk. Real Kyoto itineraries streaming end-to-end.
+- **/api/city-photo endpoint**: Wikipedia REST summary lookup with country disambiguation + Unsplash Source fallback; 24h in-memory cache. Kyoto lookup completes in ~130ms.
+- **CityHero component**: editorial banner with soft gradient overlay, Instrument Serif city title, "VIA WIKIPEDIA" attribution chip; used on /sightseeing and /planner (replaces old useWikiHero mini-hero on planner).
+- **shadcn Calendar + Popover + DateRangePicker**: react-day-picker v10 fully themed with emerald + zinc; two-month view, disabled past dates, emerald range fill, nights badge, clear button. Native <input type='date'> removed from /hotels.
+- HotelFinder rewritten from scratch using shadcn primitives (Button, Input, Label, Badge, DateRangePicker, CityHero).
+
+### Test result
+- Backend: 12/12 pytest (iter3_all.xml)
+- Frontend: 100% acceptance criteria across 8 routes, 0 pageerrors
