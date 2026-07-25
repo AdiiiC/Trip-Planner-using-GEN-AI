@@ -24,29 +24,39 @@ async def explore_sightseeing(inp: SightseeingInput) -> dict:
     sources: list[str] = []
 
     try:
-        from agents.search import exa_search
+        from agents.search import exa_search, serper_search
 
-        # Run both Exa searches concurrently — halves response time
-        att_results, nb_results = await asyncio.gather(
+        # Three concurrent searches: Exa for rich content, Serper for live pricing
+        att_results, nb_results, price_results = await asyncio.gather(
             exa_search(
-                f"{location} top tourist attractions sightseeing entry fee ticket price tips",
+                f"{location} top tourist attractions things to do guide",
                 k=5,
             ),
             exa_search(
-                f"best day trips near {location} within 2 hours worth visiting entry fee how to get there",
+                f"best day trips near {location} within 2 hours worth visiting",
                 k=4,
+            ),
+            serper_search(
+                f"{location} tourist attractions entry fee ticket price 2025 site:tripadvisor.com OR site:getyourguide.com OR site:lonelyplanet.com OR site:timeout.com",
+                k=6,
             ),
         )
 
         attractions_text = "\n".join(
             r.get("content", "") for r in att_results if isinstance(r, dict)
         )
+        # Merge Serper pricing data into attractions text
+        pricing_text = "\n".join(
+            r.get("content", "") for r in price_results if isinstance(r, dict)
+        )
+        attractions_text = f"{attractions_text}\n\n--- ENTRY FEE DATA ---\n{pricing_text}"
+
         nearby_text = "\n".join(
             r.get("content", "") for r in nb_results if isinstance(r, dict)
         )
         sources = [
             r.get("url", "")
-            for r in (att_results + nb_results)
+            for r in (att_results + nb_results + price_results)
             if isinstance(r, dict) and r.get("url")
         ][:6]
 
@@ -83,8 +93,12 @@ async def explore_sightseeing(inp: SightseeingInput) -> dict:
          "    }}\n"
          "  ]\n"
          "}}\n"
-         "Include 8–12 main attractions and 4–6 nearby places. "
-         "If entry cost is unknown write 'Check locally'."),
+         "Include 8–12 main attractions and 4–6 nearby places.\n"
+         "For entry_cost: use prices from the search data above. If not in search data, "
+         "use your trained knowledge — never write 'Check locally'. "
+         "Always provide a specific price or 'Free'. "
+         "For entry_cost_usd: convert to approximate USD (use 0.0 only if genuinely free).\n"
+         "For nearby_places entry_cost: same rule — use knowledge if not in data, never 'Check locally'."),
         ("human",
          "City: {city}\n\n"
          "Attractions search data:\n{att}\n\n"
@@ -95,7 +109,7 @@ async def explore_sightseeing(inp: SightseeingInput) -> dict:
     response = llm.invoke(
         structuring_prompt.format_messages(
             city=location,
-            att=attractions_text[:3500],
+            att=attractions_text[:5000],
             nb=nearby_text[:2500],
         )
     )
