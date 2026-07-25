@@ -42,7 +42,11 @@ const COMMON_CURRENCIES = ["USD", "EUR", "GBP", "JPY", "THB", "VND", "MYR", "SGD
 const PIE_COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
 
 function SectionCard({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [open, setOpen] = useState(() => {
+    // On mobile (< 768px), start all sections closed to reduce scroll
+    if (typeof window !== "undefined" && window.innerWidth < 768) return false;
+    return defaultOpen;
+  });
   return (
     <div className="glass rounded-2xl overflow-hidden">
       <button
@@ -476,12 +480,20 @@ export function BudgetCalculator() {
             <AnimatePresence>
               {result && <BudgetResults result={result} />}
               {!result && (
-                <div className="glass rounded-2xl p-8 flex flex-col items-center justify-center text-center min-h-[300px]">
-                  <Calculator className="w-10 h-10 text-indigo-400/40 mb-3" />
-                  <p className="text-[#8892b0] text-sm">
-                    Fill in your details and click<br />
-                    <span className="text-white">&quot;Calculate My Share&quot;</span>
-                  </p>
+                <div className="glass rounded-2xl p-8 flex flex-col items-center justify-center text-center min-h-[300px] gap-4">
+                  <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="32" cy="32" r="30" fill="#1a1f36" stroke="#1e2540" strokeWidth="1.5"/>
+                    <rect x="18" y="20" width="28" height="22" rx="3" fill="#131829" stroke="#1e2540" strokeWidth="1"/>
+                    <line x1="22" y1="28" x2="42" y2="28" stroke="#6366f1" strokeWidth="1.5" strokeLinecap="round"/>
+                    <line x1="22" y1="33" x2="36" y2="33" stroke="#8892b0" strokeWidth="1" strokeLinecap="round"/>
+                    <line x1="22" y1="37" x2="38" y2="37" stroke="#8892b0" strokeWidth="1" strokeLinecap="round"/>
+                    <circle cx="44" cy="42" r="9" fill="#1a1f36" stroke="#10b981" strokeWidth="1.5"/>
+                    <text x="44" y="46" textAnchor="middle" fill="#10b981" fontSize="10" fontWeight="bold">₹</text>
+                  </svg>
+                  <div>
+                    <p className="text-white font-medium mb-1">Your budget breakdown</p>
+                    <p className="text-[#8892b0] text-sm">Fill in your trip details and click<br /><span className="text-white">&quot;Calculate My Share&quot;</span></p>
+                  </div>
                 </div>
               )}
             </AnimatePresence>

@@ -84,6 +84,43 @@ async def _limit_body_size(request: Request, call_next):
             return JSONResponse(status_code=413, content={"detail": "Request body too large (max 1 MB)"})
     return await call_next(request)
 
+
+# ── hCaptcha verification ─────────────────────────────────────────────────────
+# Set HCAPTCHA_SECRET_KEY in Render to activate captcha on expensive LLM endpoints.
+# Get your key at https://dashboard.hcaptcha.com — free tier available.
+# When key is not set, captcha is skipped (graceful degradation).
+
+_HCAPTCHA_SECRET = os.getenv("HCAPTCHA_SECRET_KEY", "")
+_HCAPTCHA_VERIFY_URL = "https://api.hcaptcha.com/siteverify"
+_CAPTCHA_PATHS = {"/api/plan", "/api/multi-city", "/api/refine"}
+
+
+async def _verify_captcha(token: str) -> bool:
+    """Returns True if token is valid or captcha is not configured."""
+    if not _HCAPTCHA_SECRET:
+        return True  # captcha not configured — allow all
+    if not token:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.post(
+                _HCAPTCHA_VERIFY_URL,
+                data={"secret": _HCAPTCHA_SECRET, "response": token},
+            )
+            return resp.json().get("success", False)
+    except Exception:
+        return True  # network error — fail open (don't block real users)
+
+
+@app.middleware("http")
+async def _captcha_middleware(request: Request, call_next):
+    if _HCAPTCHA_SECRET and request.url.path in _CAPTCHA_PATHS:
+        token = request.headers.get("X-Captcha-Token", "")
+        if not await _verify_captcha(token):
+            from fastapi.responses import JSONResponse
+            return JSONResponse(status_code=403, content={"detail": "Captcha verification failed."})
+    return await call_next(request)
+
 # ── security headers middleware ───────────────────────────────────────────────
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):

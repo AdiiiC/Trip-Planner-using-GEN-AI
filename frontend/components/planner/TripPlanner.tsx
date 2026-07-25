@@ -23,6 +23,7 @@ import { CityAutocomplete } from "@/components/ui/CityAutocomplete";
 import { BackToTop } from "@/components/ui/BackToTop";
 import { QRCodeButton } from "@/components/ui/QRCodeButton";
 import Image from "next/image";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
   useSensor, useSensors, DragEndEvent,
@@ -305,6 +306,11 @@ export function TripPlanner() {
   // Ref for back-to-top scroll detection
   const outputRef = useRef<HTMLDivElement>(null);
 
+  // hCaptcha ref — only active when NEXT_PUBLIC_HCAPTCHA_SITE_KEY is set
+  const hcaptchaRef = useRef<HCaptcha>(null);
+  const [captchaToken, setCaptchaToken] = useState<string>("");
+  const HCAPTCHA_KEY = process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY ?? "";
+
   // DnD sensors for multi-city drag reorder
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -410,7 +416,7 @@ export function TripPlanner() {
     addRecentCity(v.city);
     const interests = v.interests.split(",").map(s => s.trim()).filter(Boolean);
     if (mode === "plan") {
-      startStream((oc, od, oe) => api.planTrip({ city: v.city, days: v.days, interests, budget: v.budget, travel_style: v.travel_style, dietary: v.dietary, travel_date: v.travel_date, currency: v.currency }, oc, od, oe));
+      startStream((oc, od, oe) => api.planTrip({ city: v.city, days: v.days, interests, budget: v.budget, travel_style: v.travel_style, dietary: v.dietary, travel_date: v.travel_date, currency: v.currency }, oc, od, oe, captchaToken || undefined));
     } else if (mode === "packing") {
       startStream((oc, od, oe) => api.packingList({ city: v.city, days: v.days, travel_style: v.travel_style, interests, travel_date: v.travel_date }, oc, od, oe));
     } else if (mode === "visa") {
@@ -599,6 +605,17 @@ export function TripPlanner() {
                 <input className="input-dark" placeholder="temples, street food, hiking" {...register("interests")} />
               </div>
               {sharedFormFields(register)}
+
+              {/* hCaptcha — only rendered when NEXT_PUBLIC_HCAPTCHA_SITE_KEY is set */}
+              {HCAPTCHA_KEY && (
+                <HCaptcha
+                  ref={hcaptchaRef}
+                  sitekey={HCAPTCHA_KEY}
+                  size="invisible"
+                  onVerify={(token) => setCaptchaToken(token)}
+                  onExpire={() => setCaptchaToken("")}
+                />
+              )}
 
               {/* Streaming progress bar */}
               {streaming && mode === "plan" && (
@@ -793,11 +810,31 @@ export function TripPlanner() {
                   </div>
                 )}
                 {!output && !streaming && !error && (
-                  <div className="flex flex-col items-center justify-center h-full text-center gap-3">
-                    <Globe className="w-12 h-12 text-indigo-400/30" />
-                    <p className="text-[#8892b0] text-sm">
-                      Fill in the form and click <span className="text-white">Generate</span>
-                    </p>
+                  <div className="flex flex-col items-center justify-center h-full text-center gap-4 py-12">
+                    {/* Illustrated plane + map */}
+                    <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <circle cx="40" cy="40" r="38" fill="#1a1f36" stroke="#1e2540" strokeWidth="2"/>
+                      <circle cx="40" cy="40" r="24" fill="#131829" stroke="#1e2540" strokeWidth="1"/>
+                      <path d="M24 42 Q32 28 40 32 Q48 36 56 22" stroke="#6366f1" strokeWidth="1.5" fill="none" strokeDasharray="3 2" opacity="0.6"/>
+                      <circle cx="24" cy="42" r="2.5" fill="#818cf8"/>
+                      <circle cx="56" cy="22" r="2.5" fill="#c084fc"/>
+                      <g transform="translate(36,26) rotate(-30)">
+                        <path d="M0 0 L6 -3 L8 0 L6 3 Z" fill="#818cf8"/>
+                        <path d="M2 -1 L0 -4 L3 -3 Z" fill="#6366f1"/>
+                        <path d="M2 1 L0 4 L3 3 Z" fill="#6366f1"/>
+                      </g>
+                    </svg>
+                    <div>
+                      <p className="text-white font-medium mb-1">Your itinerary will appear here</p>
+                      <p className="text-[#8892b0] text-sm max-w-xs">
+                        Fill in the form and click <span className="text-indigo-400">Generate</span> — streamed live
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 justify-center">
+                      {["Kyoto, Japan","Bali, Indonesia","Barcelona, Spain"].map(eg => (
+                        <span key={eg} className="text-[10px] border border-indigo-500/20 bg-indigo-600/5 text-indigo-400 rounded-full px-2 py-0.5">{eg}</span>
+                      ))}
+                    </div>
                   </div>
                 )}
                 {(output || streaming) && (

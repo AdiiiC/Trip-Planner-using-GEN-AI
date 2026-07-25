@@ -77,18 +77,20 @@ async function postCached<T>(path: string, body: unknown): Promise<T> {
 /**
  * Consume a Server-Sent-Events stream and call `onChunk` with each accumulated
  * text chunk.  Calls `onDone` when the stream ends or `onError` on failure.
+ * Optional `extraHeaders` for captcha tokens etc.
  */
 async function consumeSSE(
   path: string,
   body: unknown,
   onChunk: (text: string) => void,
   onDone: () => void,
-  onError: (e: Error) => void
+  onError: (e: Error) => void,
+  extraHeaders?: Record<string, string>
 ) {
   try {
     const res = await fetch(`${BASE}${path}`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...extraHeaders },
       body: JSON.stringify(body),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -134,8 +136,10 @@ export const api = {
     body: PlanInput,
     onChunk: (t: string) => void,
     onDone: () => void,
-    onError: (e: Error) => void
-  ) => consumeSSE("/api/plan", body, onChunk, onDone, onError),
+    onError: (e: Error) => void,
+    captchaToken?: string
+  ) => consumeSSE("/api/plan", body, onChunk, onDone, onError,
+    captchaToken ? { "X-Captcha-Token": captchaToken } : undefined),
 
   refineTrip: (
     body: RefineInput,
@@ -169,8 +173,10 @@ export const api = {
     body: MultiCityInput,
     onChunk: (t: string) => void,
     onDone: () => void,
-    onError: (e: Error) => void
-  ) => consumeSSE("/api/multi-city", body, onChunk, onDone, onError),
+    onError: (e: Error) => void,
+    captchaToken?: string
+  ) => consumeSSE("/api/multi-city", body, onChunk, onDone, onError,
+    captchaToken ? { "X-Captcha-Token": captchaToken } : undefined),
 
   // ── Cached (10 min sessionStorage TTL) ───────────────────────────────────
   getSightseeing: (city: string, country = "") =>

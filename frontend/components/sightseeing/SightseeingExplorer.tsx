@@ -174,13 +174,21 @@ export function SightseeingExplorer() {
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="glass rounded-2xl p-16 flex flex-col items-center text-center"
+            className="glass rounded-2xl p-12 flex flex-col items-center text-center gap-4"
           >
-            <MapPin className="w-12 h-12 text-indigo-400/30 mb-4" />
-            <p className="text-white font-medium mb-1">Discover any destination</p>
-            <p className="text-[#8892b0] text-sm max-w-xs">
-              Enter a city to get top attractions with entry prices and nearby day trips — scraped live from the web.
-            </p>
+            <svg width="72" height="72" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="36" cy="36" r="34" fill="#1a1f36" stroke="#1e2540" strokeWidth="1.5"/>
+              <path d="M36 18 C36 18 22 30 22 40 C22 47.7 28.3 54 36 54 C43.7 54 50 47.7 50 40 C50 30 36 18 36 18Z" fill="#131829" stroke="#6366f1" strokeWidth="1.5"/>
+              <circle cx="36" cy="40" r="5" fill="#6366f1" opacity="0.8"/>
+              <line x1="36" y1="18" x2="36" y2="14" stroke="#c084fc" strokeWidth="1.5" strokeLinecap="round"/>
+              <circle cx="36" cy="13" r="2" fill="#c084fc"/>
+            </svg>
+            <div>
+              <p className="text-white font-medium mb-1">Discover any destination</p>
+              <p className="text-[#8892b0] text-sm max-w-xs">
+                Enter a city to get top attractions with real entry prices and nearby day trips.
+              </p>
+            </div>
           </motion.div>
         )}
 
