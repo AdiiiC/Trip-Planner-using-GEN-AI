@@ -534,6 +534,7 @@ async def optimize_route_endpoint(request: Request, body: OptimizeRouteInput):
 @limiter.limit("20/minute")
 async def best_time_endpoint(request: Request, body: BestTimeInput):
     """Month-by-month best-time-to-visit scores for a destination."""
+    from agents.cache import search_cache
     cache_key = search_cache.make_key("best-time", body.destination.lower())
     cached = search_cache.get(cache_key)
     if cached:
