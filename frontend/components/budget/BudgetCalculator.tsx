@@ -10,6 +10,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { BudgetInput, BudgetResult, VisaCheckResult } from "@/lib/types";
 import { formatINR, formatUSD, formatNumber, cn } from "@/lib/utils";
+
+// ─── Route auto-formatter ────────────────────────────────────────────────────
+// Turns "BLR-SGN", "BLR > SGN", "BLR to SGN", "BLR SGN" → "BLR → SGN"
+function normalizeRoute(raw: string): string {
+  // Replace explicit separators immediately
+  let v = raw.replace(/\s*(?:->|-->|-\s*>|→|to\b)\s*/gi, " → ");
+  // If two whitespace-separated words with no separator yet, insert arrow
+  v = v.replace(/^([A-Z0-9]{2,4})\s+([A-Z0-9]{2,4})$/i, "$1 → $2");
+  return v;
+}
 import { VisaBadge, VisaResultCard } from "@/components/visa/VisaCostChecker";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
@@ -253,7 +263,16 @@ export function BudgetCalculator() {
                   <div key={f.id} className="flex gap-2 items-end">
                     <Field className="flex-1">
                       <Label>Route</Label>
-                      <input className="input-dark" placeholder="BLR → SGN" {...register(`flights.${i}.route`)} />
+                      <input
+                        className="input-dark"
+                        placeholder="BLR → SGN"
+                        {...register(`flights.${i}.route`)}
+                        onChange={(e) => {
+                          const normalized = normalizeRoute(e.target.value);
+                          e.target.value = normalized;
+                          register(`flights.${i}.route`).onChange(e);
+                        }}
+                      />
                     </Field>
                     <Field className="w-36">
                       <Label>Price (₹)</Label>
