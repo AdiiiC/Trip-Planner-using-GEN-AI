@@ -36,3 +36,12 @@ Build a high-end, production-grade frontend for existing Trip Planner repo using
 ## Test credentials
 None (no auth in this app).
 
+
+## Test iteration log
+- iter-1 (2026-01-25): SSR ok; hydration blocked by (a) narrow allowedDevOrigins, (b) unguarded Sentry init, (c) mounted-gated ThemeToggle. Frontend 60%.
+- iter-2 (2026-01-25): Fixed all three above. Frontend 100%. ThemeToggle switches data-theme, More dropdown shows 4 items, ⌘K opens palette, filter+Enter+ESC all work. Retest not needed.
+
+## Deferred items (P2)
+- Replace native `<input type="date">` in HotelFinder with shadcn Calendar + Popover
+- Deeper design pass on TripPlanner form controls (mode selector, quick examples)
+- Silence dev-only CSP cloudflare beacon block + font preload warnings
