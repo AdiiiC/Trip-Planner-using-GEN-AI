@@ -237,20 +237,26 @@ export const api = {
     }>("/api/best-time", { destination }),
 
   predictCash: (body: {
-    destinations: string[];
-    duration_days: number;
+    cities: { city: string; days: number }[];
     travelers?: number;
     travel_style?: string;
     prepaid_usd?: number;
-    daily_budget_hint_usd?: number;
   }) =>
     post<{
-      recommended_cash_usd: number;
-      range_low_usd: number;
-      range_high_usd: number;
-      per_person_usd: number;
-      per_day_usd: number;
-      breakdown: { category: string; usd: number; note: string }[];
+      cities: {
+        city: string;
+        days: number;
+        recommended_usd: number;
+        range_low_usd: number;
+        range_high_usd: number;
+        per_day_usd: number;
+        cost_level: "low" | "medium" | "high";
+        cash_tip: string;
+        breakdown: { category: string; usd: number; note: string }[];
+      }[];
+      total_recommended_usd: number;
+      total_range_low_usd: number;
+      total_range_high_usd: number;
       card_vs_cash: string;
       tips: string[];
       summary: string;

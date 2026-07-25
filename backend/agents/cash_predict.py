@@ -1,7 +1,7 @@
 """
-Cash-on-hand predictor — estimates how much physical cash (in USD) a traveller
-should carry for a trip, based on destinations, duration, travel style, and
-what's already prepaid. LLM-powered, returns structured JSON.
+Cash-on-hand predictor — per-city breakdown with adjustable categories.
+Returns structured JSON with one entry per city so the frontend can
+show sliders per city and recalculate totals interactively.
 """
 from __future__ import annotations
 
@@ -14,67 +14,80 @@ from agents.llm import ainvoke_with_fallback
 from langchain_core.prompts import ChatPromptTemplate
 
 
+class CityEntry(BaseModel):
+    city: str = Field(..., min_length=1, max_length=100)
+    days: int = Field(default=2, ge=1, le=180)
+
+
 class CashPredictInput(BaseModel):
-    destinations:  list[str] = Field(..., min_length=1, max_length=15)
-    duration_days: int   = Field(..., ge=1, le=365)
-    travelers:     int   = Field(default=1, ge=1, le=50)
-    travel_style:  str   = Field(default="balanced", max_length=40)
-    prepaid_usd:   float = Field(default=0.0, ge=0, le=1_000_000)   # flights/stays already booked
-    daily_budget_hint_usd: float = Field(default=0.0, ge=0, le=100_000)  # optional user hint
+    cities:       list[CityEntry] = Field(..., min_length=1, max_length=15)
+    travelers:    int   = Field(default=1, ge=1, le=50)
+    travel_style: str   = Field(default="balanced", max_length=40)
+    prepaid_usd:  float = Field(default=0.0, ge=0, le=1_000_000)
 
 
 _SCHEMA = """{
-  "recommended_cash_usd": 0,
-  "range_low_usd": 0,
-  "range_high_usd": 0,
-  "per_person_usd": 0,
-  "per_day_usd": 0,
-  "breakdown": [
-    {"category": "Food & drink", "usd": 0, "note": "short reason"},
-    {"category": "Local transport", "usd": 0, "note": "short reason"},
-    {"category": "Attractions & tickets", "usd": 0, "note": "short reason"},
-    {"category": "Shopping & souvenirs", "usd": 0, "note": "short reason"},
-    {"category": "Tips & misc", "usd": 0, "note": "short reason"},
-    {"category": "Emergency buffer", "usd": 0, "note": "short reason"}
+  "cities": [
+    {
+      "city": "Da Nang",
+      "days": 3,
+      "recommended_usd": 0,
+      "range_low_usd": 0,
+      "range_high_usd": 0,
+      "per_day_usd": 0,
+      "cost_level": "low",
+      "cash_tip": "Vietnam is mostly cash — always carry small bills",
+      "breakdown": [
+        {"category": "Food & drink",         "usd": 0, "note": "street food + local restaurants"},
+        {"category": "Local transport",      "usd": 0, "note": "grab, taxis, motorbike"},
+        {"category": "Attractions & entry",  "usd": 0, "note": "tickets, guided tours"},
+        {"category": "Shopping & souvenirs", "usd": 0, "note": "markets, gifts"},
+        {"category": "Tips & misc",          "usd": 0, "note": "tipping, tips, incidentals"},
+        {"category": "Emergency buffer",     "usd": 0, "note": "10-15% buffer"}
+      ]
+    }
   ],
-  "card_vs_cash": "1-2 sentences on how card-friendly the destinations are",
-  "tips": ["practical cash tip", "practical cash tip"],
-  "summary": "2-3 sentence recommendation"
+  "total_recommended_usd": 0,
+  "total_range_low_usd": 0,
+  "total_range_high_usd": 0,
+  "card_vs_cash": "1-2 sentences on card acceptance across the itinerary",
+  "tips": ["practical tip 1", "practical tip 2"],
+  "summary": "2-3 sentence overall recommendation"
 }"""
 
 _prompt = ChatPromptTemplate.from_messages([
     ("system",
-     "You are a seasoned travel budgeting expert. Estimate how much PHYSICAL CASH "
-     "(in USD) a traveller should carry in hand for a trip. Return ONLY valid JSON — "
-     "no markdown fences. Schema:\n" + _SCHEMA.replace("{", "{{").replace("}", "}}") + "\n"
+     "You are a travel budgeting expert. Return ONLY valid JSON — no markdown fences. "
+     "Schema:\n" + _SCHEMA.replace("{", "{{").replace("}", "}}") + "\n"
      "Rules:\n"
-     "- Base estimates on real cost-of-living for the destinations given.\n"
-     "- EXCLUDE prepaid costs (flights/hotels already booked) — only day-to-day cash spend.\n"
-     "- recommended_cash_usd is the TOTAL for all travellers combined.\n"
-     "- Provide a sensible low/high range (roughly ±20%).\n"
-     "- Consider how card-friendly each destination is (cash-heavy places need more).\n"
-     "- Include a 10-15% emergency buffer.\n"
-     "- breakdown values are TOTALS for the whole trip (all travellers), summing to recommended_cash_usd.\n"
-     "- Keep notes short and practical."),
+     "• Return one entry per city in the cities array.\n"
+     "• Base estimates on the actual cost of living in each city.\n"
+     "• EXCLUDE prepaid costs — only day-to-day physical cash spending.\n"
+     "• recommended_usd for each city = sum of its breakdown items.\n"
+     "• total_recommended_usd = sum of all city recommended_usd values.\n"
+     "• Include a 10-15% emergency buffer in each city's breakdown.\n"
+     "• cost_level: 'low' | 'medium' | 'high' (relative to global average).\n"
+     "• cash_tip: one sentence specific to that city's cash norms.\n"
+     "• All USD amounts are TOTALS for ALL travellers combined."),
     ("human",
-     "Destinations: {destinations}\n"
-     "Duration: {duration_days} days\n"
+     "Cities:\n{cities_text}\n"
      "Travellers: {travelers}\n"
      "Travel style: {travel_style}\n"
-     "Already prepaid (exclude): ${prepaid_usd} USD\n"
-     "User daily-budget hint (0 = none): ${daily_hint} USD\n\n"
+     "Already prepaid (exclude): ${prepaid_usd} USD\n\n"
      "Return only the JSON object."),
 ])
 
 
 async def predict_cash(inp: CashPredictInput) -> dict:
+    cities_text = "\n".join(
+        f"  - {c.city} ({c.days} day{'s' if c.days != 1 else ''})"
+        for c in inp.cities
+    )
     msgs = _prompt.format_messages(
-        destinations=", ".join(inp.destinations),
-        duration_days=inp.duration_days,
+        cities_text=cities_text,
         travelers=inp.travelers,
         travel_style=inp.travel_style,
         prepaid_usd=round(inp.prepaid_usd, 2),
-        daily_hint=round(inp.daily_budget_hint_usd, 2),
     )
     resp = await ainvoke_with_fallback(msgs, json_mode=True, temperature=0.2)
     raw = re.sub(r"```[a-z]*\n?", "", resp.content.strip()).strip()
@@ -83,5 +96,5 @@ async def predict_cash(inp: CashPredictInput) -> dict:
     except json.JSONDecodeError:
         m = re.search(r"\{.*\}", raw, re.DOTALL)
         return json.loads(m.group()) if m else {
-            "recommended_cash_usd": 0, "breakdown": [], "summary": "Could not estimate."
+            "cities": [], "total_recommended_usd": 0, "summary": "Could not estimate."
         }
