@@ -259,4 +259,23 @@ export const api = {
     setCached(key, data);
     return data;
   },
+
+  createShare: async (body: {
+    title: string;
+    city: string;
+    country?: string;
+    days: number;
+    markdown: string;
+  }): Promise<{ id: string; path: string }> => {
+    const res = await fetch(`${BASE}/api/share`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      throw new Error(err.detail ?? "Share failed");
+    }
+    return res.json();
+  },
 };

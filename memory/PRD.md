@@ -66,3 +66,16 @@ None (no auth in this app).
 
 ### Test result (iter-4)
 - Frontend: 100% (all acceptance criteria across /sightseeing, /planner, /hotels, mobile 375px). No JS errors from CityHero.
+
+## Follow-up iteration 5 (2026-01-25)
+### Delivered
+- **Universal DatePicker**: new `components/ui/DatePicker.tsx` (single date, same emerald aesthetic as DateRangePicker). Wired into:
+  - Flights page (replaces native `<input type='date'>`; native count = 0)
+  - Multi-city planner arrival-date fields (per stop) using react-hook-form `Controller`
+  - Single-trip planner "Travel Date" field
+- **Multi-City Heroes**: new `<MultiCityHeroes>` sub-component in TripPlanner renders a responsive grid of compact CityHero cards for every stop (with Wikipedia photos + city title overlay), shown above the streamed itinerary in multi-city mode. Layout adapts to 1/2/3/4+ stops.
+- **Share A Trip**:
+  - Backend: `POST /api/share` and `GET /api/share/{id}` with JSON file store at `/app/backend/data/shares.json`.
+  - Frontend: new route `/share/[id]` (server-rendered) with CityHero + prose-trip markdown + "Draft a similar trip" CTA.
+  - Dynamic OG image at `/share/[id]/opengraph-image` (next/og edge runtime) with city photo + Instrument-Serif title baked in.
+  - `handleShare` in TripPlanner now POSTs to `/api/share`, copies the public URL to clipboard, and shows a Sonner toast (Open button) — falls back to the old fragment-encoded URL if the backend share fails.

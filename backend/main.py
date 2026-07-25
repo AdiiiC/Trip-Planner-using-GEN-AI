@@ -619,3 +619,71 @@ async def city_photo(request: Request, city: str, country: str | None = None):
     payload = {"city": city_norm, "url": src, "source": "wikipedia" if "wikipedia" in (src or "") or "wikimedia" in (src or "") else "unsplash"}
     _photo_cache.set(cache_key, payload)
     return payload
+
+
+# ── share a trip (public read-only) ──────────────────────────────────────────
+import pathlib
+from datetime import datetime, timezone
+from pydantic import BaseModel, Field
+
+_SHARES_DIR = pathlib.Path(__file__).parent / "data"
+_SHARES_DIR.mkdir(parents=True, exist_ok=True)
+_SHARES_FILE = _SHARES_DIR / "shares.json"
+
+
+def _load_shares() -> dict:
+    if not _SHARES_FILE.exists():
+        return {}
+    try:
+        return json.loads(_SHARES_FILE.read_text())
+    except Exception:
+        return {}
+
+
+def _save_shares(data: dict) -> None:
+    try:
+        _SHARES_FILE.write_text(json.dumps(data))
+    except Exception as exc:  # noqa
+        logger.warning("Failed to persist shares: %s", exc)
+
+
+class ShareInput(BaseModel):
+    title: str = Field(default="Untitled Trip", min_length=1, max_length=140)
+    city: str = Field(default="", max_length=120)
+    country: str = Field(default="", max_length=80)
+    days: int = Field(default=0, ge=0, le=60)
+    markdown: str = Field(..., min_length=10, max_length=200_000)
+
+
+@app.post("/api/share")
+@limiter.limit("10/minute")
+async def create_share(request: Request, body: ShareInput):
+    """Create a public, read-only shared trip. Returns a short id + url path."""
+    shares = _load_shares()
+    # Short 10-char id — collision-resistant enough for a shareable link.
+    share_id = uuid.uuid4().hex[:10]
+    while share_id in shares:
+        share_id = uuid.uuid4().hex[:10]
+
+    shares[share_id] = {
+        "id":       share_id,
+        "title":    body.title.strip() or "Untitled Trip",
+        "city":     body.city.strip(),
+        "country":  body.country.strip(),
+        "days":     body.days,
+        "markdown": body.markdown,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    _save_shares(shares)
+    return {"id": share_id, "path": f"/share/{share_id}"}
+
+
+@app.get("/api/share/{share_id}")
+@limiter.limit("120/minute")
+async def get_share(request: Request, share_id: str):
+    shares = _load_shares()
+    entry = shares.get(share_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Shared trip not found")
+    return entry
+

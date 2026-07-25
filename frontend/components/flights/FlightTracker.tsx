@@ -5,10 +5,15 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useMutation } from "@tanstack/react-query";
 import { Plane, Search, Luggage, Clock, Zap, ExternalLink, ArrowRight } from "lucide-react";
 import Image from "next/image";
+import { format } from "date-fns";
 import { api } from "@/lib/api";
 import type { FlightResult, FlightSearchResult } from "@/lib/types";
 import { formatINR, cn } from "@/lib/utils";
 import { SkeletonFlightCard } from "@/components/ui/skeleton";
+import { DatePicker } from "@/components/ui/DatePicker";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 // Airline name → domain for Clearbit logo
 const AIRLINE_DOMAINS: Record<string, string> = {
@@ -53,17 +58,24 @@ const POPULAR_ROUTES = [
   { origin: "Chennai (MAA)",   destination: "Bali (DPS)" },
 ];
 
-const today = new Date().toISOString().slice(0, 10);
+const today = new Date();
+const todayIso = today.toISOString().slice(0, 10);
 
 export function FlightTracker() {
   const [origin, setOrigin]         = useState("");
   const [destination, setDestination] = useState("");
-  const [date, setDate]             = useState(today);
+  const [date, setDate]             = useState<Date | undefined>(today);
   const [passengers, setPassengers] = useState(1);
   const [result, setResult]         = useState<FlightSearchResult | null>(null);
 
   const mutation = useMutation({
-    mutationFn: () => api.searchFlights({ origin, destination, date, passengers }),
+    mutationFn: () =>
+      api.searchFlights({
+        origin,
+        destination,
+        date: date ? format(date, "yyyy-MM-dd") : todayIso,
+        passengers,
+      }),
     onSuccess: setResult,
   });
 
@@ -98,27 +110,32 @@ export function FlightTracker() {
       </div>
 
       {/* Search panel */}
-      <div className="glass rounded-2xl p-5 mb-6 space-y-4">
+      <div className="surface p-5 mb-6 space-y-4">
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="lg:col-span-1">
-            <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">From</label>
-            <input value={origin} onChange={e => setOrigin(e.target.value)}
-              placeholder="Bengaluru / BLR" className="input-dark" />
+          <div className="lg:col-span-1 space-y-1.5">
+            <Label>From</Label>
+            <Input value={origin} onChange={e => setOrigin(e.target.value)}
+              placeholder="Bengaluru / BLR" data-testid="flight-origin" />
           </div>
-          <div className="lg:col-span-1">
-            <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">To</label>
-            <input value={destination} onChange={e => setDestination(e.target.value)}
-              placeholder="Ho Chi Minh City / SGN" className="input-dark" />
+          <div className="lg:col-span-1 space-y-1.5">
+            <Label>To</Label>
+            <Input value={destination} onChange={e => setDestination(e.target.value)}
+              placeholder="Ho Chi Minh City / SGN" data-testid="flight-destination" />
           </div>
-          <div>
-            <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Date (One-way)</label>
-            <input type="date" value={date} min={today}
-              onChange={e => setDate(e.target.value)} className="input-dark" />
+          <div className="space-y-1.5">
+            <Label>Date (One-way)</Label>
+            <DatePicker
+              value={date}
+              onChange={setDate}
+              minDate={new Date()}
+              placeholder="Pick a departure"
+              data-testid="flight-date"
+            />
           </div>
-          <div>
-            <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Passengers</label>
-            <input type="number" min={1} max={9} value={passengers}
-              onChange={e => setPassengers(+e.target.value)} className="input-dark w-full" />
+          <div className="space-y-1.5">
+            <Label>Passengers</Label>
+            <Input type="number" min={1} max={9} value={passengers}
+              onChange={e => setPassengers(+e.target.value || 1)} data-testid="flight-passengers" />
           </div>
         </div>
 
@@ -134,11 +151,11 @@ export function FlightTracker() {
           </div>
         </div>
 
-        <button onClick={handleSearch} disabled={mutation.isPending || !origin || !destination}
-          className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl font-medium transition-colors disabled:opacity-60">
-          <Search className="w-4 h-4" />
+        <Button onClick={handleSearch} disabled={mutation.isPending || !origin || !destination}
+          data-testid="flight-search-btn">
+          <Search className="w-4 h-4" strokeWidth={1.75} />
           {mutation.isPending ? "Searching Skyscanner…" : "Search Flights"}
-        </button>
+        </Button>
 
         {/* Popular routes */}
         <div>
@@ -208,7 +225,7 @@ export function FlightTracker() {
                 <span className="text-amber-300 font-medium">Important: </span>
                 {result.note}&nbsp;
                 <a
-                  href={`https://www.skyscanner.co.in/transport/flights/${encodeURIComponent(origin)}/${encodeURIComponent(destination)}/${date.replace(/-/g, "")}/?adults=${passengers}&cabinclass=economy&adultsv2=${passengers}&childrenv2=&infants=0&checkedBaggage=1`}
+                  href={`https://www.skyscanner.co.in/transport/flights/${encodeURIComponent(origin)}/${encodeURIComponent(destination)}/${(date ? format(date, "yyyy-MM-dd") : todayIso).replace(/-/g, "")}/?adults=${passengers}&cabinclass=economy&adultsv2=${passengers}&childrenv2=&infants=0&checkedBaggage=1`}
                   target="_blank" rel="noopener noreferrer"
                   className="text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-1">
                   Check live on Skyscanner.co.in <ExternalLink className="w-3 h-3" />

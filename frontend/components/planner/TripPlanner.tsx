@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, Controller, useWatch, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
@@ -21,7 +21,9 @@ import remarkGfm from "remark-gfm";
 import confetti from "canvas-confetti";
 import { CityAutocomplete } from "@/components/ui/CityAutocomplete";
 import { CityHero } from "@/components/ui/CityHero";
+import { DatePicker } from "@/components/ui/DatePicker";
 import { BackToTop } from "@/components/ui/BackToTop";
+import { toast } from "sonner";
 import { QRCodeButton } from "@/components/ui/QRCodeButton";
 import Image from "next/image";
 import HCaptcha from "@hcaptcha/react-hcaptcha";
@@ -159,6 +161,74 @@ function SortableStop({ id, children }: { id: string; children: React.ReactNode 
     </div>
   );
 }
+
+// ─── multi-city hero photo essay ──────────────────────────────────────────────
+
+function MultiCityHeroes({ control }: { control: Control<MultiForm> }) {
+  const stops = useWatch({ control, name: "stops" });
+  const valid = (stops ?? []).filter((s) => s?.city?.trim());
+
+  if (valid.length === 0) return null;
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.5 }}
+      className="mb-6"
+      data-testid="multi-city-heroes"
+    >
+      <div className="flex items-center justify-between mb-3">
+        <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--fg-muted)]">
+          ⁘ Photo essay · {valid.length} {valid.length === 1 ? "stop" : "stops"}
+        </p>
+        <span className="text-[10px] font-mono text-[var(--fg-dim)] uppercase tracking-[0.1em]">
+          via Wikipedia
+        </span>
+      </div>
+
+      <div
+        className={cn(
+          "grid gap-3",
+          valid.length === 1 && "grid-cols-1",
+          valid.length === 2 && "sm:grid-cols-2",
+          valid.length === 3 && "sm:grid-cols-3",
+          valid.length >= 4 && "sm:grid-cols-2 md:grid-cols-4",
+        )}
+      >
+        {valid.map((s, i) => (
+          <div
+            key={`${s.city}-${i}`}
+            className="relative rounded-xl border border-[var(--border)] overflow-hidden aspect-[4/3] group hover-lift"
+            data-testid={`multi-hero-stop-${i}`}
+          >
+            <div className="absolute inset-0 pointer-events-none">
+              <CityHero city={s.city} variant="compact" className="!border-0 !rounded-none aspect-auto h-full" />
+            </div>
+            <div className="absolute inset-0 bg-gradient-to-t from-[var(--bg)]/85 via-[var(--bg)]/30 to-transparent pointer-events-none" />
+            <div className="absolute inset-x-0 bottom-0 p-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <span className="font-mono text-[10px] text-[var(--accent-hover)] uppercase tracking-[0.14em]">
+                  Stop {String(i + 1).padStart(2, "0")}
+                </span>
+                {s.days && (
+                  <span className="text-[10px] text-[var(--fg-dim)] font-mono">
+                    · {s.days}d
+                  </span>
+                )}
+              </div>
+              <p className="font-display text-2xl leading-tight tracking-tight text-[var(--fg)] truncate">
+                {s.city}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+
 
 // ─── recently searched hook ───────────────────────────────────────────────────
 
@@ -338,7 +408,7 @@ export function TripPlanner() {
   }, [mode]);
 
   // ── single-city form ─────────────────────────────────────────────────────
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<SingleForm>({
+  const { register, handleSubmit, setValue, watch, control, formState: { errors } } = useForm<SingleForm>({
     resolver: zodResolver(singleSchema),
     defaultValues: {
       city: "", days: 3,
@@ -462,26 +532,57 @@ export function TripPlanner() {
   const handlePrint = () => window.print();
 
   const handleShare = async () => {
-    const url = buildShareUrl(city, days, output);
-    // Use native share sheet on mobile (WhatsApp, Messages, etc.)
-    if (typeof navigator !== "undefined" && navigator.share) {
-      try {
-        await navigator.share({
-          title: `${city || "Trip"} — ${days}-day itinerary`,
-          text: `Check out this AI-generated ${days}-day trip plan for ${city}!`,
-          url,
-        });
-        return;
-      } catch (e) {
-        // User cancelled or share failed — fall through to clipboard
-        if ((e as Error).name === "AbortError") return;
+    if (!output) return;
+    try {
+      // Create a public read-only share on the backend
+      const { path } = await api.createShare({
+        title: `${city || "Trip"} — ${days}-day itinerary`,
+        city: city || "",
+        country: "",
+        days,
+        markdown: output,
+      });
+      const url = `${typeof window !== "undefined" ? window.location.origin : ""}${path}`;
+
+      // Use native share sheet on mobile if available
+      if (typeof navigator !== "undefined" && navigator.share) {
+        try {
+          await navigator.share({
+            title: `${city || "Trip"} — ${days}-day itinerary`,
+            text: `A ${days}-day trip plan for ${city} — read-only link`,
+            url,
+          });
+          setShared(true);
+          if (sharedTimer.current) clearTimeout(sharedTimer.current);
+          sharedTimer.current = setTimeout(() => setShared(false), 3000);
+          return;
+        } catch (e) {
+          if ((e as Error).name === "AbortError") return;
+        }
       }
+      // Fallback: copy to clipboard + toast
+      await navigator.clipboard.writeText(url);
+      toast.success("Public link copied", {
+        description: url,
+        action: {
+          label: "Open",
+          onClick: () => window.open(url, "_blank"),
+        },
+      });
+      setShared(true);
+      if (sharedTimer.current) clearTimeout(sharedTimer.current);
+      sharedTimer.current = setTimeout(() => setShared(false), 3000);
+    } catch (e) {
+      // Fallback to old fragment URL if backend share fails
+      const url = buildShareUrl(city, days, output);
+      await navigator.clipboard.writeText(url);
+      toast.error("Public share unavailable — copied a self-contained link instead");
+      setShared(true);
+      if (sharedTimer.current) clearTimeout(sharedTimer.current);
+      sharedTimer.current = setTimeout(() => setShared(false), 3000);
+      // Log for debugging but don't crash UI
+      console.warn("Share failed:", e);
     }
-    // Fallback: copy to clipboard
-    navigator.clipboard.writeText(url);
-    setShared(true);
-    if (sharedTimer.current) clearTimeout(sharedTimer.current);
-    sharedTimer.current = setTimeout(() => setShared(false), 3000);
   };
 
   const handleSave = () => {
@@ -598,7 +699,21 @@ export function TripPlanner() {
                 </div>
                 <div>
                   <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Travel Date</label>
-                  <input type="date" className="input-dark" {...register("travel_date")} />
+                  <Controller
+                    control={control}
+                    name="travel_date"
+                    render={({ field }) => (
+                      <DatePicker
+                        value={field.value ? new Date(field.value) : undefined}
+                        onChange={(d) =>
+                          field.onChange(d ? d.toISOString().slice(0, 10) : "")
+                        }
+                        minDate={new Date()}
+                        placeholder="Pick a date"
+                        data-testid="single-travel-date"
+                      />
+                    )}
+                  />
                 </div>
               </div>
               <div>
@@ -677,8 +792,22 @@ export function TripPlanner() {
                   </div>
                   <div>
                     <label className="text-[10px] text-[var(--fg-muted)] mb-0.5 block">Arrival date</label>
-                    <input type="date" className="input-dark text-xs"
-                      {...multiForm.register(`stops.${i}.date`)} />
+                    <Controller
+                      control={multiForm.control}
+                      name={`stops.${i}.date`}
+                      render={({ field }) => (
+                        <DatePicker
+                          compact
+                          value={field.value ? new Date(field.value) : undefined}
+                          onChange={(d) =>
+                            field.onChange(d ? d.toISOString().slice(0, 10) : "")
+                          }
+                          minDate={new Date()}
+                          placeholder="Arrival date"
+                          data-testid={`multi-stop-date-${i}`}
+                        />
+                      )}
+                    />
                   </div>
                   <div>
                     <label className="text-[10px] text-[var(--fg-muted)] mb-0.5 block">Notes (optional)</label>
@@ -841,7 +970,7 @@ export function TripPlanner() {
                 {(output || streaming) && (
                   <>
                     {/* Editorial city hero — Wikipedia lead image with overlay caption */}
-                    {city && !streaming && (
+                    {city && !streaming && mode !== "multi" && (
                       <motion.div
                         initial={{ opacity: 0, y: 8 }}
                         animate={{ opacity: 1, y: 0 }}
@@ -850,6 +979,10 @@ export function TripPlanner() {
                       >
                         <CityHero city={city} />
                       </motion.div>
+                    )}
+                    {/* Multi-city photo essay */}
+                    {mode === "multi" && !streaming && (
+                      <MultiCityHeroes control={multiForm.control} />
                     )}
                     <div className="prose-trip text-sm">
                       {streaming
