@@ -33,3 +33,9 @@ frontend/out/
 .idea/
 .vscode/
 *.swp
+.env.*
+*.env
+credentials.json
+*.pem
+*.key
+.credentials
