@@ -8,7 +8,7 @@ import Image from "next/image";
 import { api } from "@/lib/api";
 import type { FlightResult, FlightSearchResult } from "@/lib/types";
 import { formatINR, cn } from "@/lib/utils";
-import { SkeletonFlightCard } from "@/components/ui/Skeleton";
+import { SkeletonFlightCard } from "@/components/ui/skeleton";
 
 // Airline name → domain for Clearbit logo
 const AIRLINE_DOMAINS: Record<string, string> = {
@@ -81,18 +81,18 @@ export function FlightTracker() {
     <div className="max-w-5xl mx-auto px-4 py-8">
       <div className="mb-8 flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-1">Flight Price Tracker</h1>
-          <p className="text-[#8892b0]">
+          <h1 className="font-display text-4xl md:text-5xl leading-[1] tracking-tight text-[var(--fg)] mb-2">Flight Price Tracker</h1>
+          <p className="text-[var(--fg-muted)]">
             One-way prices · Check-in baggage included · Powered by
             <a href="https://www.skyscanner.co.in" target="_blank" rel="noopener noreferrer"
-              className="ml-1 text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-0.5">
+              className="ml-1 text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-0.5">
               Skyscanner.co.in <ExternalLink className="w-3 h-3" />
             </a>
           </p>
         </div>
         {/* Skyscanner badge */}
         <a href="https://www.skyscanner.co.in" target="_blank" rel="noopener noreferrer"
-          className="shrink-0 flex items-center gap-2 glass rounded-xl px-3 py-1.5 text-xs text-indigo-300 border border-indigo-500/30 hover:border-indigo-400/50 transition-colors">
+          className="shrink-0 flex items-center gap-2 glass rounded-xl px-3 py-1.5 text-xs text-emerald-300 border border-emerald-500/30 hover:border-emerald-400/50 transition-colors">
           <Plane className="w-3.5 h-3.5" /> Verify on Skyscanner.co.in
         </a>
       </div>
@@ -101,22 +101,22 @@ export function FlightTracker() {
       <div className="glass rounded-2xl p-5 mb-6 space-y-4">
         <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="lg:col-span-1">
-            <label className="text-xs font-medium text-[#8892b0] mb-1 block">From</label>
+            <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">From</label>
             <input value={origin} onChange={e => setOrigin(e.target.value)}
               placeholder="Bengaluru / BLR" className="input-dark" />
           </div>
           <div className="lg:col-span-1">
-            <label className="text-xs font-medium text-[#8892b0] mb-1 block">To</label>
+            <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">To</label>
             <input value={destination} onChange={e => setDestination(e.target.value)}
               placeholder="Ho Chi Minh City / SGN" className="input-dark" />
           </div>
           <div>
-            <label className="text-xs font-medium text-[#8892b0] mb-1 block">Date (One-way)</label>
+            <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Date (One-way)</label>
             <input type="date" value={date} min={today}
               onChange={e => setDate(e.target.value)} className="input-dark" />
           </div>
           <div>
-            <label className="text-xs font-medium text-[#8892b0] mb-1 block">Passengers</label>
+            <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Passengers</label>
             <input type="number" min={1} max={9} value={passengers}
               onChange={e => setPassengers(+e.target.value)} className="input-dark w-full" />
           </div>
@@ -128,26 +128,26 @@ export function FlightTracker() {
             <Luggage className="w-3.5 h-3.5" />
             ✓ Check-in Baggage Filter: ON
           </div>
-          <div className="flex items-center gap-2 bg-indigo-500/15 border border-indigo-500/30 rounded-full px-3 py-1 text-xs font-medium text-indigo-300">
+          <div className="flex items-center gap-2 bg-emerald-500/15 border border-emerald-500/30 rounded-full px-3 py-1 text-xs font-medium text-emerald-300">
             <Plane className="w-3.5 h-3.5" />
             ✓ One-way
           </div>
         </div>
 
         <button onClick={handleSearch} disabled={mutation.isPending || !origin || !destination}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-xl font-medium transition-colors disabled:opacity-60">
+          className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl font-medium transition-colors disabled:opacity-60">
           <Search className="w-4 h-4" />
           {mutation.isPending ? "Searching Skyscanner…" : "Search Flights"}
         </button>
 
         {/* Popular routes */}
         <div>
-          <p className="text-xs text-[#8892b0] mb-2">Popular routes:</p>
+          <p className="text-xs text-[var(--fg-muted)] mb-2">Popular routes:</p>
           <div className="flex flex-wrap gap-2">
             {POPULAR_ROUTES.map(r => (
               <button key={r.origin + r.destination}
                 onClick={() => setRoute(r.origin, r.destination)}
-                className="text-xs rounded-full border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-1 text-[#8892b0] hover:text-white transition-colors">
+                className="text-xs rounded-full border border-white/10 bg-white/5 hover:bg-white/10 px-3 py-1 text-[var(--fg-muted)] hover:text-white transition-colors">
                 {r.origin} → {r.destination}
               </button>
             ))}
@@ -178,11 +178,11 @@ export function FlightTracker() {
                 <h2 className="text-xl font-bold text-white">
                   {result.route || `${origin} → ${destination}`}
                 </h2>
-                <p className="text-[#8892b0] text-sm">{result.date} · {result.type} · {result.baggage_filter}</p>
+                <p className="text-[var(--fg-muted)] text-sm">{result.date} · {result.type} · {result.baggage_filter}</p>
               </div>
               {result.cheapest_inr > 0 && (
                 <div className="glass rounded-xl px-4 py-2 border border-emerald-500/30">
-                  <p className="text-xs text-[#8892b0]">From</p>
+                  <p className="text-xs text-[var(--fg-muted)]">From</p>
                   <p className="text-2xl font-bold text-emerald-400">{formatINR(result.cheapest_inr)}</p>
                 </div>
               )}
@@ -197,20 +197,20 @@ export function FlightTracker() {
               </div>
             ) : (
               <div className="glass rounded-xl p-8 text-center">
-                <p className="text-[#8892b0]">No results found. Try adjusting your search.</p>
+                <p className="text-[var(--fg-muted)]">No results found. Try adjusting your search.</p>
               </div>
             )}
 
             {/* Note + verify link */}
             <div className="glass rounded-xl p-4 flex items-start gap-3">
               <Zap className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-              <div className="text-sm text-[#8892b0]">
+              <div className="text-sm text-[var(--fg-muted)]">
                 <span className="text-amber-300 font-medium">Important: </span>
                 {result.note}&nbsp;
                 <a
                   href={`https://www.skyscanner.co.in/transport/flights/${encodeURIComponent(origin)}/${encodeURIComponent(destination)}/${date.replace(/-/g, "")}/?adults=${passengers}&cabinclass=economy&adultsv2=${passengers}&childrenv2=&infants=0&checkedBaggage=1`}
                   target="_blank" rel="noopener noreferrer"
-                  className="text-indigo-400 hover:text-indigo-300 inline-flex items-center gap-1">
+                  className="text-emerald-400 hover:text-emerald-300 inline-flex items-center gap-1">
                   Check live on Skyscanner.co.in <ExternalLink className="w-3 h-3" />
                 </a>
               </div>
@@ -219,13 +219,13 @@ export function FlightTracker() {
             {/* Sources */}
             {result.sources?.length > 0 && (
               <div className="flex flex-wrap gap-2 items-center">
-                <span className="text-xs text-[#8892b0]">Sources:</span>
+                <span className="text-xs text-[var(--fg-muted)]">Sources:</span>
                 {result.sources.filter(Boolean).slice(0, 4).map((s, i) => {
                   let domain = "";
                   try { domain = new URL(s).hostname.replace("www.", ""); } catch {}
                   return domain ? (
                     <a key={i} href={s} target="_blank" rel="noopener noreferrer"
-                      className="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-500/30 rounded-full px-2 py-0.5 flex items-center gap-1">
+                      className="text-xs text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded-full px-2 py-0.5 flex items-center gap-1">
                       {domain} <ExternalLink className="w-2.5 h-2.5" />
                     </a>
                   ) : null;
@@ -274,7 +274,7 @@ function FlightCard({ flight: f, isFirst, rank }: { flight: FlightResult; isFirs
             <p className="text-white font-semibold">{f.airline}</p>
           </div>
           {f.flight_number && f.flight_number !== "null" && (
-            <p className="text-xs text-[#8892b0]">{f.flight_number}</p>
+            <p className="text-xs text-[var(--fg-muted)]">{f.flight_number}</p>
           )}
           <div className="flex flex-wrap gap-1">
             {isFirst && (
@@ -283,7 +283,7 @@ function FlightCard({ flight: f, isFirst, rank }: { flight: FlightResult; isFirs
               </span>
             )}
             {rank === 1 && !isFirst && (
-              <span className="text-[10px] font-medium bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 rounded-full px-2 py-0.5">
+              <span className="text-[10px] font-medium bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 rounded-full px-2 py-0.5">
                 Mid-range
               </span>
             )}
@@ -306,34 +306,34 @@ function FlightCard({ flight: f, isFirst, rank }: { flight: FlightResult; isFirs
             <>
               <div className="text-center">
                 <p className="text-white font-bold text-lg">{f.departure}</p>
-                <p className="text-xs text-[#8892b0]">Depart</p>
+                <p className="text-xs text-[var(--fg-muted)]">Depart</p>
               </div>
               <div className="flex-1 flex flex-col items-center gap-0.5">
                 {f.duration && f.duration !== "null" && (
-                  <div className="flex items-center gap-1 text-xs text-[#8892b0]">
+                  <div className="flex items-center gap-1 text-xs text-[var(--fg-muted)]">
                     <Clock className="w-3 h-3" /> {f.duration}
                   </div>
                 )}
                 <div className="flex items-center w-full">
-                  <div className="flex-1 border-t border-dashed border-[#1e2540]" />
-                  <ArrowRight className="w-3 h-3 text-[#8892b0] mx-1" />
+                  <div className="flex-1 border-t border-dashed border-[var(--border)]" />
+                  <ArrowRight className="w-3 h-3 text-[var(--fg-muted)] mx-1" />
                 </div>
-                <p className="text-[10px] text-[#8892b0]">{f.stops}</p>
+                <p className="text-[10px] text-[var(--fg-muted)]">{f.stops}</p>
               </div>
               <div className="text-center">
                 <p className="text-white font-bold text-lg">{f.arrival}</p>
-                <p className="text-xs text-[#8892b0]">Arrive</p>
+                <p className="text-xs text-[var(--fg-muted)]">Arrive</p>
               </div>
             </>
           ) : (
             <div className="flex items-center gap-3">
               {f.duration && f.duration !== "null" && (
-                <span className="flex items-center gap-1 text-xs text-[#8892b0]">
+                <span className="flex items-center gap-1 text-xs text-[var(--fg-muted)]">
                   <Clock className="w-3 h-3" /> {f.duration}
                 </span>
               )}
-              <span className="text-xs text-[#8892b0]">{f.stops}</span>
-              <span className="text-[10px] text-[#8892b0]/50 border border-white/10 rounded px-1.5 py-0.5">
+              <span className="text-xs text-[var(--fg-muted)]">{f.stops}</span>
+              <span className="text-[10px] text-[var(--fg-muted)]/50 border border-white/10 rounded px-1.5 py-0.5">
                 Timings: verify on Skyscanner
               </span>
             </div>
@@ -350,8 +350,8 @@ function FlightCard({ flight: f, isFirst, rank }: { flight: FlightResult; isFirs
 
         {/* Price */}
         <div className="text-right">
-          <p className="text-2xl font-bold text-white">{f.price_inr > 0 ? formatINR(f.price_inr) : "—"}</p>
-          <p className="text-xs text-[#8892b0]">{f.source || "Skyscanner"}</p>
+          <p className="font-display text-3xl leading-tight tracking-tight text-[var(--fg)]">{f.price_inr > 0 ? formatINR(f.price_inr) : "—"}</p>
+          <p className="text-xs text-[var(--fg-muted)]">{f.source || "Skyscanner"}</p>
         </div>
       </div>
     </motion.div>

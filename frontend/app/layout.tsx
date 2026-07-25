@@ -1,47 +1,56 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Instrument_Serif } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { Navbar } from "@/components/Navbar";
+import { Footer } from "@/components/Footer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { PageTransition } from "@/components/PageTransition";
 import { CookieConsent } from "@/components/CookieConsent";
 import { CommandPalette } from "@/components/CommandPalette";
-import { AuroraBackground } from "@/components/ui/AuroraBackground";
 import { Toaster } from "sonner";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+  display: "swap",
+});
+
+const instrumentSerif = Instrument_Serif({
+  variable: "--font-instrument-serif",
+  subsets: ["latin"],
+  weight: ["400"],
+  style: ["normal", "italic"],
+  display: "swap",
 });
 
 export const metadata: Metadata = {
-  title: { default: "TripMind — AI Trip Planner", template: "%s | TripMind" },
+  title: { default: "Wayfare — Considered Trip Planning", template: "%s · Wayfare" },
   description:
-    "Plan smarter trips with AI. Streaming itineraries, live flight prices, hotel finders, visa checks, and budget breakdowns — all in one place.",
+    "A quieter way to plan travel. Streaming itineraries, live prices, visa clarity — assembled from real sources, presented without noise.",
   keywords: ["trip planner", "AI travel", "itinerary generator", "flight tracker", "budget travel"],
   openGraph: {
-    title: "TripMind — AI Trip Planner",
-    description: "Plan smarter trips with AI-powered itineraries, live prices, and visa info.",
+    title: "Wayfare — Considered Trip Planning",
+    description: "A quieter way to plan travel. Itineraries, prices and visa clarity.",
     type: "website",
-    siteName: "TripMind",
+    siteName: "Wayfare",
   },
   twitter: {
     card: "summary_large_image",
-    title: "TripMind — AI Trip Planner",
-    description: "Plan smarter trips with AI-powered itineraries, live prices, and visa info.",
+    title: "Wayfare",
+    description: "A quieter way to plan travel.",
   },
   manifest: "/manifest.json",
 };
 
-// themeColor must be in viewport export (not metadata) — Next.js 13.4+
 export const viewport: Viewport = {
-  themeColor: "#6366f1",
+  themeColor: "#09090b",
 };
 
 export default function RootLayout({
@@ -52,33 +61,31 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${instrumentSerif.variable} h-full antialiased`}
       suppressHydrationWarning
     >
-      <body className="min-h-full flex flex-col bg-[#0c0f1a]">
+      <body className="min-h-full flex flex-col" data-testid="app-body">
         <Providers>
-          <AuroraBackground />
           <CommandPalette />
           <Navbar />
           <ErrorBoundary>
             <main className="flex-1">
               <PageTransition>{children}</PageTransition>
             </main>
-            <footer className="border-t border-[#1e2540] py-4 no-print">
-              <div className="max-w-7xl mx-auto px-4 flex items-center justify-between flex-wrap gap-2 text-xs text-[#8892b0]">
-                <span>© {new Date().getFullYear()} TripMind. AI-generated content — always verify before booking.</span>
-                <div className="flex gap-4">
-                  <a href="/privacy" className="hover:text-indigo-400 transition-colors">Privacy</a>
-                  <a href="/terms" className="hover:text-indigo-400 transition-colors">Terms</a>
-                </div>
-              </div>
-            </footer>
+            <Footer />
           </ErrorBoundary>
           <CookieConsent />
           <Toaster
-            position="top-right"
+            position="bottom-right"
+            theme="dark"
             toastOptions={{
-              style: { background: "#131829", border: "1px solid #1e2540", color: "#e8eaf6" },
+              style: {
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                color: "var(--fg)",
+                fontFamily: "var(--font-geist-sans)",
+              },
+              className: "text-sm",
             }}
           />
         </Providers>

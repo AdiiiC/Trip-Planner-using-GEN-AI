@@ -10,7 +10,7 @@ export default async function Image() {
     (
       <div
         style={{
-          background: "linear-gradient(135deg, #0c0f1a 0%, #1a1f36 60%, #0c0f1a 100%)",
+          background: "linear-gradient(135deg, var(--bg) 0%, var(--surface-2) 60%, var(--bg) 100%)",
           width: "100%",
           height: "100%",
           display: "flex",
@@ -23,14 +23,14 @@ export default async function Image() {
       >
         {/* Logo row */}
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
-          <div style={{ fontSize: 64, color: "#818cf8" }}>✈</div>
-          <div style={{ fontSize: 72, fontWeight: 800, color: "#818cf8", letterSpacing: -2 }}>
+          <div style={{ fontSize: 64, color: "#34d399" }}>✈</div>
+          <div style={{ fontSize: 72, fontWeight: 800, color: "#34d399", letterSpacing: -2 }}>
             TripMind
           </div>
         </div>
 
         {/* Tagline */}
-        <div style={{ fontSize: 32, color: "#c7d2fe", fontWeight: 500 }}>
+        <div style={{ fontSize: 32, color: "var(--fg)", fontWeight: 500 }}>
           AI-Powered Trip Planner
         </div>
 
@@ -49,7 +49,7 @@ export default async function Image() {
               key={f}
               style={{
                 fontSize: 18,
-                color: "#8892b0",
+                color: "var(--fg-muted)",
                 background: "rgba(99,102,241,0.15)",
                 border: "1px solid rgba(99,102,241,0.3)",
                 borderRadius: 24,

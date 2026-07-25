@@ -55,7 +55,7 @@ function SectionCard({ title, children, defaultOpen = true }: { title: string; c
         className="w-full flex items-center justify-between px-6 py-4 text-left"
       >
         <span className="font-semibold text-white">{title}</span>
-        {open ? <ChevronUp className="w-4 h-4 text-[#8892b0]" /> : <ChevronDown className="w-4 h-4 text-[#8892b0]" />}
+        {open ? <ChevronUp className="w-4 h-4 text-[var(--fg-muted)]" /> : <ChevronDown className="w-4 h-4 text-[var(--fg-muted)]" />}
       </button>
       <AnimatePresence initial={false}>
         {open && (
@@ -66,7 +66,7 @@ function SectionCard({ title, children, defaultOpen = true }: { title: string; c
             transition={{ duration: 0.2 }}
             className="overflow-hidden"
           >
-            <div className="px-6 pb-6 space-y-3 border-t border-[#1e2540]">{children}</div>
+            <div className="px-6 pb-6 space-y-3 border-t border-[var(--border)]">{children}</div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -75,7 +75,7 @@ function SectionCard({ title, children, defaultOpen = true }: { title: string; c
 }
 
 function Label({ children }: { children: React.ReactNode }) {
-  return <label className="block text-xs font-medium text-[#8892b0] mb-1">{children}</label>;
+  return <label className="block text-xs font-medium text-[var(--fg-muted)] mb-1">{children}</label>;
 }
 
 function Field({ children, className }: { children: React.ReactNode; className?: string }) {
@@ -181,8 +181,8 @@ export function BudgetCalculator() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-1">Trip Budget Calculator</h1>
-        <p className="text-[#8892b0]">Multi-destination · Per-person share · Cash conversion breakdown</p>
+        <h1 className="font-display text-4xl md:text-5xl leading-[1] tracking-tight text-[var(--fg)] mb-2">Trip Budget Calculator</h1>
+        <p className="text-[var(--fg-muted)]">Multi-destination · Per-person share · Cash conversion breakdown</p>
       </div>
 
       <form onSubmit={handleSubmit(onSubmit)}>
@@ -202,11 +202,11 @@ export function BudgetCalculator() {
             {/* Exchange Rates */}
             <SectionCard title="Exchange Rates (→ INR)">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs text-[#8892b0]">
+                <p className="text-xs text-[var(--fg-muted)]">
                   Enter how many INR = 1 unit of each currency
                 </p>
                 <button type="button" onClick={fillLiveRates} disabled={loadingForex}
-                  className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-500/30 rounded-lg px-2 py-1 transition-colors">
+                  className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded-lg px-2 py-1 transition-colors">
                   <RefreshCw className={cn("w-3 h-3", loadingForex && "animate-spin")} />
                   {loadingForex ? "Fetching…" : "Fill from Orient Exchange"}
                 </button>
@@ -233,13 +233,13 @@ export function BudgetCalculator() {
                 ))}
               </div>
               <button type="button" onClick={() => exRates.append({ currency: "SGD", rate_to_inr: 62 })}
-                className="mt-2 flex items-center gap-1 text-indigo-400 text-sm hover:text-indigo-300">
+                className="mt-2 flex items-center gap-1 text-emerald-400 text-sm hover:text-emerald-300">
                 <PlusCircle className="w-4 h-4" /> Add currency
               </button>
-              <p className="text-[10px] text-[#8892b0]/60 mt-2">
+              <p className="text-[10px] text-[var(--fg-muted)]/60 mt-2">
                 Rates sourced from{" "}
                 <a href="https://www.orientexchange.in" target="_blank" rel="noopener noreferrer"
-                  className="text-indigo-400/70 hover:text-indigo-400 underline underline-offset-2">
+                  className="text-emerald-400/70 hover:text-emerald-400 underline underline-offset-2">
                   orientexchange.in
                 </a>
                 {" "}· updated on page load
@@ -267,14 +267,14 @@ export function BudgetCalculator() {
                 ))}
               </div>
               <button type="button" onClick={() => flights.append({ route: "", price_inr: 0, per_person: true })}
-                className="mt-2 flex items-center gap-1 text-indigo-400 text-sm hover:text-indigo-300">
+                className="mt-2 flex items-center gap-1 text-emerald-400 text-sm hover:text-emerald-300">
                 <PlusCircle className="w-4 h-4" /> Add flight
               </button>
             </SectionCard>
 
             {/* Accommodation */}
             <SectionCard title="Accommodation">
-              <p className="text-xs text-[#8892b0] flex items-center gap-1 mb-2">
+              <p className="text-xs text-[var(--fg-muted)] flex items-center gap-1 mb-2">
                 <Info className="w-3 h-3" /> Total booking price; choose split type
               </p>
               <div className="space-y-2">
@@ -315,7 +315,7 @@ export function BudgetCalculator() {
                               : (visaRes ? setExpandedVisa(destVal) : handleCheckVisa(destVal))
                             }
                             disabled={checkingVisa === destVal}
-                            className="flex items-center gap-1.5 text-xs border border-indigo-500/30 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-300 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-60"
+                            className="flex items-center gap-1.5 text-xs border border-emerald-500/30 bg-emerald-600/10 hover:bg-emerald-600/20 text-emerald-300 rounded-lg px-2.5 py-1 transition-colors disabled:opacity-60"
                           >
                             <ShieldCheck className="w-3 h-3" />
                             {checkingVisa === destVal ? "Checking…" : visaRes ? "Visa checked" : "Check Visa"}
@@ -355,7 +355,7 @@ export function BudgetCalculator() {
                 })}
               </div>
               <button type="button" onClick={() => stays.append({ destination: "", total_cost_inr: 0, split_type: "group" })}
-                className="mt-2 flex items-center gap-1 text-indigo-400 text-sm hover:text-indigo-300">
+                className="mt-2 flex items-center gap-1 text-emerald-400 text-sm hover:text-emerald-300">
                 <PlusCircle className="w-4 h-4" /> Add accommodation
               </button>
             </SectionCard>
@@ -387,7 +387,7 @@ export function BudgetCalculator() {
                 ))}
               </div>
               <button type="button" onClick={() => sight.append({ name: "", destination: "", amount: 0, currency: "USD" })}
-                className="mt-2 flex items-center gap-1 text-indigo-400 text-sm hover:text-indigo-300">
+                className="mt-2 flex items-center gap-1 text-emerald-400 text-sm hover:text-emerald-300">
                 <PlusCircle className="w-4 h-4" /> Add item
               </button>
             </SectionCard>
@@ -419,7 +419,7 @@ export function BudgetCalculator() {
                 ))}
               </div>
               <button type="button" onClick={() => xtra.append({ name: "", destination: "", amount: 0, currency: "USD" })}
-                className="mt-2 flex items-center gap-1 text-indigo-400 text-sm hover:text-indigo-300">
+                className="mt-2 flex items-center gap-1 text-emerald-400 text-sm hover:text-emerald-300">
                 <PlusCircle className="w-4 h-4" /> Add extra
               </button>
             </SectionCard>
@@ -433,7 +433,7 @@ export function BudgetCalculator() {
                     {...register("pocket_money_usd", { valueAsNumber: true })} />
                 </Field>
               </div>
-              <p className="text-xs text-[#8892b0] mb-2">
+              <p className="text-xs text-[var(--fg-muted)] mb-2">
                 Allocate some of your pocket money as local cash:
               </p>
               <div className="space-y-2">
@@ -457,13 +457,13 @@ export function BudgetCalculator() {
                 ))}
               </div>
               <button type="button" onClick={() => cashConv.append({ currency: "THB", amount_inr: 0 })}
-                className="mt-2 flex items-center gap-1 text-indigo-400 text-sm hover:text-indigo-300">
+                className="mt-2 flex items-center gap-1 text-emerald-400 text-sm hover:text-emerald-300">
                 <PlusCircle className="w-4 h-4" /> Add conversion
               </button>
             </SectionCard>
 
             <button type="submit" disabled={mutation.isPending}
-              className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 rounded-xl transition-colors disabled:opacity-60">
+              className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-xl transition-colors disabled:opacity-60">
               <Calculator className="w-5 h-5" />
               {mutation.isPending ? "Calculating…" : "Calculate My Share"}
             </button>
@@ -482,17 +482,17 @@ export function BudgetCalculator() {
               {!result && (
                 <div className="glass rounded-2xl p-8 flex flex-col items-center justify-center text-center min-h-[300px] gap-4">
                   <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="32" cy="32" r="30" fill="#1a1f36" stroke="#1e2540" strokeWidth="1.5"/>
-                    <rect x="18" y="20" width="28" height="22" rx="3" fill="#131829" stroke="#1e2540" strokeWidth="1"/>
-                    <line x1="22" y1="28" x2="42" y2="28" stroke="#6366f1" strokeWidth="1.5" strokeLinecap="round"/>
-                    <line x1="22" y1="33" x2="36" y2="33" stroke="#8892b0" strokeWidth="1" strokeLinecap="round"/>
-                    <line x1="22" y1="37" x2="38" y2="37" stroke="#8892b0" strokeWidth="1" strokeLinecap="round"/>
-                    <circle cx="44" cy="42" r="9" fill="#1a1f36" stroke="#10b981" strokeWidth="1.5"/>
+                    <circle cx="32" cy="32" r="30" fill="#17171b" stroke="#1f1f24" strokeWidth="1.5"/>
+                    <rect x="18" y="20" width="28" height="22" rx="3" fill="#111114" stroke="#1f1f24" strokeWidth="1"/>
+                    <line x1="22" y1="28" x2="42" y2="28" stroke="#10b981" strokeWidth="1.5" strokeLinecap="round"/>
+                    <line x1="22" y1="33" x2="36" y2="33" stroke="#a1a1aa" strokeWidth="1" strokeLinecap="round"/>
+                    <line x1="22" y1="37" x2="38" y2="37" stroke="#a1a1aa" strokeWidth="1" strokeLinecap="round"/>
+                    <circle cx="44" cy="42" r="9" fill="#17171b" stroke="#10b981" strokeWidth="1.5"/>
                     <text x="44" y="46" textAnchor="middle" fill="#10b981" fontSize="10" fontWeight="bold">₹</text>
                   </svg>
                   <div>
                     <p className="text-white font-medium mb-1">Your budget breakdown</p>
-                    <p className="text-[#8892b0] text-sm">Fill in your trip details and click<br /><span className="text-white">&quot;Calculate My Share&quot;</span></p>
+                    <p className="text-[var(--fg-muted)] text-sm">Fill in your trip details and click<br /><span className="text-white">&quot;Calculate My Share&quot;</span></p>
                   </div>
                 </div>
               )}
@@ -547,10 +547,10 @@ function BudgetResults({ result }: { result: BudgetResult }) {
       className="space-y-4"
     >
       {/* Grand total — animated counter */}
-      <div className="glass rounded-2xl p-6 border border-indigo-500/30">
-        <p className="text-xs font-semibold uppercase tracking-wider text-[#8892b0] mb-1">Grand Total (Your Share)</p>
+      <div className="glass rounded-2xl p-6 border border-emerald-500/30">
+        <p className="text-xs font-semibold uppercase tracking-wider text-[var(--fg-muted)] mb-1">Grand Total (Your Share)</p>
         <p className="text-4xl font-bold gradient-text">{formatINR(displayedINR)}</p>
-        <p className="text-[#8892b0] text-sm mt-1">≈ {formatUSD(gt.usd)}</p>
+        <p className="text-[var(--fg-muted)] text-sm mt-1">≈ {formatUSD(gt.usd)}</p>
       </div>
 
       {/* Bar chart — horizontal breakdown */}
@@ -559,19 +559,19 @@ function BudgetResults({ result }: { result: BudgetResult }) {
         <div className="h-48">
           <ResponsiveContainer width="100%" height="100%">
             <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e2540" horizontal={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke="#1f1f24" horizontal={false} />
               <XAxis type="number" tick={false} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="name" tick={{ fill: "#8892b0", fontSize: 11 }} axisLine={false} tickLine={false} width={70} />
+              <YAxis type="category" dataKey="name" tick={{ fill: "var(--fg-muted)", fontSize: 11 }} axisLine={false} tickLine={false} width={70} />
               <Tooltip
                 formatter={(v) => formatINR(Number(v))}
-                contentStyle={{ background: "#131829", border: "1px solid #1e2540", borderRadius: 8, color: "#e8eaf6" }}
+                contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--fg)" }}
                 cursor={{ fill: "rgba(99,102,241,0.08)" }}
               />
               <Bar dataKey="value" radius={[0, 4, 4, 0]}>
                 {chartData.map((_, i) => (
                   <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
                 ))}
-                <LabelList dataKey="value" position="right" formatter={(v: unknown) => formatINR(Number(v))} style={{ fill: "#e8eaf6", fontSize: 10 }} />
+                <LabelList dataKey="value" position="right" formatter={(v: unknown) => formatINR(Number(v))} style={{ fill: "var(--fg)", fontSize: 10 }} />
               </Bar>
             </BarChart>
           </ResponsiveContainer>
@@ -589,14 +589,14 @@ function BudgetResults({ result }: { result: BudgetResult }) {
               </Pie>
               <Tooltip
                 formatter={(v) => formatINR(Number(v))}
-                contentStyle={{ background: "#131829", border: "1px solid #1e2540", borderRadius: 8, color: "#e8eaf6" }}
+                contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--fg)" }}
               />
             </PieChart>
           </ResponsiveContainer>
         </div>
         <div className="flex flex-wrap gap-2 justify-center mt-2">
           {pieData.map((d, i) => (
-            <span key={d.name} className="flex items-center gap-1 text-xs text-[#8892b0]">
+            <span key={d.name} className="flex items-center gap-1 text-xs text-[var(--fg-muted)]">
               <span className="w-2 h-2 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
               {d.name}
             </span>
@@ -631,7 +631,7 @@ function BudgetResults({ result }: { result: BudgetResult }) {
             ))}
           </ResultSection>
         )}
-        <div className="border-t border-[#1e2540] pt-2 flex justify-between text-white font-semibold">
+        <div className="border-t border-[var(--border)] pt-2 flex justify-between text-white font-semibold">
           <span>Total Fixed</span>
           <span>{formatINR(fc.total_inr)}</span>
         </div>
@@ -653,7 +653,7 @@ function BudgetResults({ result }: { result: BudgetResult }) {
 function ResultSection({ label, total, children }: { label: string; total: number; children: React.ReactNode }) {
   return (
     <div className="rounded-xl bg-white/3 border border-white/5 p-3 space-y-1">
-      <div className="flex justify-between text-xs font-medium text-[#8892b0] mb-1">
+      <div className="flex justify-between text-xs font-medium text-[var(--fg-muted)] mb-1">
         <span>{label}</span>
         <span className="text-white">{formatINR(total)}</span>
       </div>
@@ -664,7 +664,7 @@ function ResultSection({ label, total, children }: { label: string; total: numbe
 
 function Row({ label, value, sub }: { label: string; value: string; sub?: boolean }) {
   return (
-    <div className={cn("flex justify-between text-xs", sub ? "pl-3 text-[#8892b0]" : "text-[#8892b0]")}>
+    <div className={cn("flex justify-between text-xs", sub ? "pl-3 text-[var(--fg-muted)]" : "text-[var(--fg-muted)]")}>
       <span>{label}</span>
       <span className="text-white font-medium">{value}</span>
     </div>

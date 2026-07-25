@@ -72,7 +72,7 @@ const VISA_CONFIG: Record<VisaType, {
   },
   unknown: {
     label: "Verify with Embassy",
-    color: "text-[#8892b0]",
+    color: "text-[var(--fg-muted)]",
     bg: "bg-white/5",
     border: "border-white/10",
     icon: AlertTriangle,
@@ -133,7 +133,7 @@ export function VisaResultCard({
         ) : (
           <div className="text-right">
             <p className="text-white font-bold text-xl">${result.cost_usd}</p>
-            <p className="text-xs text-[#8892b0]">≈ {formatINR(result.cost_inr_approx)}</p>
+            <p className="text-xs text-[var(--fg-muted)]">≈ {formatINR(result.cost_inr_approx)}</p>
           </div>
         )}
       </div>
@@ -164,7 +164,7 @@ export function VisaResultCard({
           <div>
             <button
               onClick={() => setShowSteps(o => !o)}
-              className="flex items-center gap-1.5 text-sm font-medium text-indigo-300 hover:text-indigo-200 transition-colors"
+              className="flex items-center gap-1.5 text-sm font-medium text-emerald-300 hover:text-emerald-200 transition-colors"
             >
               {showSteps ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
               What you need to do ({result.step_by_step.length} steps)
@@ -178,8 +178,8 @@ export function VisaResultCard({
                   className="mt-3 space-y-2 overflow-hidden"
                 >
                   {result.step_by_step.map((step, i) => (
-                    <li key={i} className="flex items-start gap-2.5 text-sm text-[#8892b0]">
-                      <span className="shrink-0 w-5 h-5 rounded-full bg-indigo-600/30 border border-indigo-500/30 flex items-center justify-center text-[10px] font-bold text-indigo-300 mt-0.5">
+                    <li key={i} className="flex items-start gap-2.5 text-sm text-[var(--fg-muted)]">
+                      <span className="shrink-0 w-5 h-5 rounded-full bg-emerald-600/30 border border-emerald-500/30 flex items-center justify-center text-[10px] font-bold text-emerald-300 mt-0.5">
                         {i + 1}
                       </span>
                       {step}
@@ -194,13 +194,13 @@ export function VisaResultCard({
         {/* Required docs */}
         {result.required_documents?.length > 0 && (
           <div>
-            <p className="text-xs font-semibold text-[#8892b0] uppercase tracking-wider mb-2">
+            <p className="text-xs font-semibold text-[var(--fg-muted)] uppercase tracking-wider mb-2">
               Documents needed
             </p>
             <div className="flex flex-wrap gap-1.5">
               {result.required_documents.map((doc, i) => (
                 <span key={i}
-                  className="text-xs bg-white/5 border border-white/10 rounded-full px-2.5 py-0.5 text-[#8892b0]">
+                  className="text-xs bg-white/5 border border-white/10 rounded-full px-2.5 py-0.5 text-[var(--fg-muted)]">
                   {doc}
                 </span>
               ))}
@@ -224,7 +224,7 @@ export function VisaResultCard({
                 href={result.apply_url}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-500/30 rounded-lg px-3 py-1.5 transition-colors"
+                className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded-lg px-3 py-1.5 transition-colors"
               >
                 Apply Online <ExternalLink className="w-3 h-3" />
               </a>
@@ -234,7 +234,7 @@ export function VisaResultCard({
                 href={result.sources[0]}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-xs text-[#8892b0] hover:text-white border border-white/10 rounded-lg px-3 py-1.5 transition-colors"
+                className="flex items-center gap-1 text-xs text-[var(--fg-muted)] hover:text-white border border-white/10 rounded-lg px-3 py-1.5 transition-colors"
               >
                 Source <ExternalLink className="w-3 h-3" />
               </a>
@@ -258,7 +258,7 @@ export function VisaResultCard({
         </div>
 
         {/* Disclaimer */}
-        <p className="text-[10px] text-[#8892b0]/60 border-t border-white/5 pt-2">
+        <p className="text-[10px] text-[var(--fg-muted)]/60 border-t border-white/5 pt-2">
           {result.verified_note}
         </p>
       </div>
@@ -295,7 +295,7 @@ export function VisaCostChecker({
         <button
           onClick={() => mutation.mutate()}
           disabled={mutation.isPending || !country.trim()}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl font-medium text-sm disabled:opacity-60 transition-colors whitespace-nowrap"
+          className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl font-medium text-sm disabled:opacity-60 transition-colors whitespace-nowrap"
         >
           <Search className="w-4 h-4" />
           {mutation.isPending ? "Checking…" : "Check Visa"}
@@ -308,7 +308,7 @@ export function VisaCostChecker({
           <button
             key={c}
             onClick={() => { setCountry(c); }}
-            className="text-xs rounded-full border border-white/10 bg-white/5 hover:bg-white/10 px-2.5 py-1 text-[#8892b0] hover:text-white transition-colors"
+            className="text-xs rounded-full border border-white/10 bg-white/5 hover:bg-white/10 px-2.5 py-1 text-[var(--fg-muted)] hover:text-white transition-colors"
           >
             {c}
           </button>
@@ -322,12 +322,12 @@ export function VisaCostChecker({
             {[0, 1, 2].map(i => (
               <div
                 key={i}
-                className="w-2.5 h-2.5 rounded-full bg-indigo-400 animate-bounce"
+                className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-bounce"
                 style={{ animationDelay: `${i * 0.15}s` }}
               />
             ))}
           </div>
-          <p className="text-[#8892b0] text-sm">Checking visa requirements for Indian passport…</p>
+          <p className="text-[var(--fg-muted)] text-sm">Checking visa requirements for Indian passport…</p>
         </div>
       )}
 
@@ -361,7 +361,7 @@ function StatPill({
 }) {
   return (
     <div className="rounded-lg bg-white/5 border border-white/10 px-3 py-2">
-      <div className="flex items-center gap-1 text-[10px] text-[#8892b0] mb-0.5">
+      <div className="flex items-center gap-1 text-[10px] text-[var(--fg-muted)] mb-0.5">
         <Icon className="w-3 h-3" /> {label}
       </div>
       <p className="text-xs font-medium text-white">{value}</p>

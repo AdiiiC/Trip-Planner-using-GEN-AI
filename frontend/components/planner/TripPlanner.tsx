@@ -105,7 +105,7 @@ function WeatherWidget({ city }: { city: string }) {
   });
 
   if (isLoading) return (
-    <div className="flex items-center gap-1.5 text-xs text-[#8892b0] animate-pulse">
+    <div className="flex items-center gap-1.5 text-xs text-[var(--fg-muted)] animate-pulse">
       <Cloud className="w-3.5 h-3.5" /> Loading weather…
     </div>
   );
@@ -119,16 +119,16 @@ function WeatherWidget({ city }: { city: string }) {
         <Cloud className="w-3.5 h-3.5 text-sky-400" />
         <span className="text-white font-medium">{data.city}</span>
       </div>
-      <div className="flex items-center gap-1 text-[#8892b0]">
+      <div className="flex items-center gap-1 text-[var(--fg-muted)]">
         <Thermometer className="w-3 h-3 text-amber-400" /> {c.temp_c}°C
       </div>
-      <div className="flex items-center gap-1 text-[#8892b0]">
+      <div className="flex items-center gap-1 text-[var(--fg-muted)]">
         <Droplets className="w-3 h-3 text-sky-400" /> {c.humidity}%
       </div>
-      <div className="flex items-center gap-1 text-[#8892b0]">
-        <Wind className="w-3 h-3 text-indigo-400" /> {c.wind_kmph} km/h
+      <div className="flex items-center gap-1 text-[var(--fg-muted)]">
+        <Wind className="w-3 h-3 text-emerald-400" /> {c.wind_kmph} km/h
       </div>
-      <span className="text-[#8892b0]">{c.description}</span>
+      <span className="text-[var(--fg-muted)]">{c.description}</span>
     </motion.div>
   );
 }
@@ -148,7 +148,7 @@ function SortableStop({ id, children }: { id: string; children: React.ReactNode 
           type="button"
           {...attributes}
           {...listeners}
-          className="mt-3 text-[#8892b0] hover:text-white cursor-grab active:cursor-grabbing"
+          className="mt-3 text-[var(--fg-muted)] hover:text-white cursor-grab active:cursor-grabbing"
           aria-label="Drag to reorder"
         >
           <GripVertical className="w-4 h-4" />
@@ -245,19 +245,19 @@ function MarkdownWithDayCopy({ content }: { content: string }) {
                 className="flex items-center justify-between px-3 py-2 bg-white/3 cursor-pointer hover:bg-white/5 transition-colors"
                 onClick={() => toggleCollapse(i)}
               >
-                <span className="text-indigo-300 font-semibold text-sm">{dayTitle}</span>
+                <span className="text-emerald-300 font-semibold text-sm">{dayTitle}</span>
                 <div className="flex items-center gap-2 no-print">
                   <button
                     onClick={e => { e.stopPropagation(); copySection(section, i); }}
-                    className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[#8892b0] hover:text-white"
+                    className="flex items-center gap-1 text-[10px] px-2 py-0.5 rounded bg-white/5 border border-white/10 text-[var(--fg-muted)] hover:text-white"
                   >
                     {copiedDay === i
                       ? <><Check className="w-3 h-3 text-emerald-400" /> Copied</>
                       : <><Copy className="w-3 h-3" /> Copy</>}
                   </button>
                   {isCollapsed
-                    ? <ChevronDown className="w-3.5 h-3.5 text-[#8892b0]" />
-                    : <ChevronUp className="w-3.5 h-3.5 text-[#8892b0]" />}
+                    ? <ChevronDown className="w-3.5 h-3.5 text-[var(--fg-muted)]" />
+                    : <ChevronUp className="w-3.5 h-3.5 text-[var(--fg-muted)]" />}
                 </div>
               </div>
               {!isCollapsed && (
@@ -362,7 +362,7 @@ export function TripPlanner() {
   // Confetti when streaming completes
   useEffect(() => {
     if (!streaming && output.length > 200) {
-      confetti({ particleCount: 90, spread: 70, origin: { y: 0.65 }, colors: ["#818cf8", "#c084fc", "#fb7185", "#34d399"] });
+      confetti({ particleCount: 90, spread: 70, origin: { y: 0.65 }, colors: ["#34d399", "#10b981", "#f59e0b", "#34d399"] });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [streaming]);
@@ -502,7 +502,7 @@ export function TripPlanner() {
     <>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs font-medium text-[#8892b0] mb-1 block">Budget</label>
+          <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Budget</label>
           <select className="input-dark" {...reg("budget")}>
           <option value="low">Low</option>
             <option value="medium">Medium</option>
@@ -510,7 +510,7 @@ export function TripPlanner() {
           </select>
         </div>
         <div>
-          <label className="text-xs font-medium text-[#8892b0] mb-1 block">Style</label>
+          <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Style</label>
           <select className="input-dark" {...reg("travel_style")}>
             <option value="relaxed">Relaxed</option>
             <option value="balanced">Balanced</option>
@@ -521,11 +521,11 @@ export function TripPlanner() {
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-xs font-medium text-[#8892b0] mb-1 block">Dietary</label>
+          <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Dietary</label>
           <input className="input-dark" placeholder="vegetarian, halal…" {...reg("dietary")} />
         </div>
         <div>
-          <label className="text-xs font-medium text-[#8892b0] mb-1 block">Currency</label>
+          <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Currency</label>
           <select className="input-dark" {...reg("currency")}>
             {["USD","EUR","GBP","INR","SGD","AUD","JPY"].map(c => <option key={c}>{c}</option>)}
           </select>
@@ -537,8 +537,8 @@ export function TripPlanner() {
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white mb-1">AI Trip Planner</h1>
-        <p className="text-[#8892b0]">Streaming itineraries · Multi-city · Visa & packing · Insurance · History</p>
+        <h1 className="font-display text-4xl md:text-5xl leading-[1] tracking-tight text-[var(--fg)] mb-2">AI Trip Planner</h1>
+        <p className="text-[var(--fg-muted)]">Streaming itineraries · Multi-city · Visa & packing · Insurance · History</p>
       </div>
 
       <div className="grid lg:grid-cols-[400px_1fr] gap-6">
@@ -551,7 +551,7 @@ export function TripPlanner() {
               <button key={id} type="button" onClick={() => setMode(id)}
                 className={cn(
                   "flex flex-col items-center justify-center gap-0.5 py-2 px-3 rounded-lg text-[10px] font-medium transition-colors shrink-0 min-w-[60px]",
-                  mode === id ? "bg-indigo-600 text-white" : "text-[#8892b0] hover:text-white"
+                  mode === id ? "bg-emerald-600 text-white" : "text-[var(--fg-muted)] hover:text-white"
                 )}>
                 <Icon className="w-3.5 h-3.5" />{label}
               </button>
@@ -562,7 +562,7 @@ export function TripPlanner() {
           {(mode === "plan" || mode === "packing" || mode === "visa") && (
             <form onSubmit={handleSubmit(onSingleSubmit)} className="glass rounded-2xl p-5 space-y-4">
               <div>
-                <label className="text-xs font-medium text-[#8892b0] mb-1 block">City / Destination *</label>
+                <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">City / Destination *</label>
                 <CityAutocomplete
                   value={city}
                   onChange={v => setValue("city", v)}
@@ -577,7 +577,7 @@ export function TripPlanner() {
                         key={rc}
                         type="button"
                         onClick={() => setValue("city", rc)}
-                        className="text-[10px] rounded-full border border-indigo-500/30 bg-indigo-600/10 text-indigo-300 px-2 py-0.5 hover:bg-indigo-600/20 transition-colors"
+                        className="text-[10px] rounded-full border border-emerald-500/30 bg-emerald-600/10 text-emerald-300 px-2 py-0.5 hover:bg-emerald-600/20 transition-colors"
                       >
                         {rc}
                       </button>
@@ -591,17 +591,17 @@ export function TripPlanner() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-[#8892b0] mb-1 block">Days (1–14)</label>
+                  <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Days (1–14)</label>
                   <input type="number" min={1} max={14} className="input-dark"
                     {...register("days", { valueAsNumber: true })} />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-[#8892b0] mb-1 block">Travel Date</label>
+                  <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Travel Date</label>
                   <input type="date" className="input-dark" {...register("travel_date")} />
                 </div>
               </div>
               <div>
-                <label className="text-xs font-medium text-[#8892b0] mb-1 block">Interests</label>
+                <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Interests</label>
                 <input className="input-dark" placeholder="temples, street food, hiking" {...register("interests")} />
               </div>
               {sharedFormFields(register)}
@@ -620,13 +620,13 @@ export function TripPlanner() {
               {/* Streaming progress bar */}
               {streaming && mode === "plan" && (
                 <div className="space-y-1 no-print">
-                  <div className="flex justify-between text-[10px] text-[#8892b0]">
+                  <div className="flex justify-between text-[10px] text-[var(--fg-muted)]">
                     <span>{daysCompleted > 0 ? `Writing Day ${daysCompleted}…` : "Starting…"}</span>
                     <span>{daysCompleted} / {days} days</span>
                   </div>
                   <div className="h-1 bg-white/5 rounded-full overflow-hidden">
                     <motion.div
-                      className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 rounded-full"
+                      className="h-full bg-gradient-to-r from-emerald-500 to-emerald-500 rounded-full"
                       initial={{ width: "5%" }}
                       animate={{ width: `${Math.max(5, (daysCompleted / days) * 100)}%` }}
                       transition={{ duration: 0.4 }}
@@ -636,7 +636,7 @@ export function TripPlanner() {
               )}
 
               <button type="submit" disabled={streaming}
-                className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-60">
+                className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-60">
                 {streaming
                   ? <><RefreshCw className="w-4 h-4 animate-spin" /> Generating…</>
                   : <><Globe className="w-4 h-4" /> Generate</>}
@@ -654,7 +654,7 @@ export function TripPlanner() {
                     <SortableStop key={f.id} id={f.id}>
                       <div className="rounded-xl bg-white/3 border border-white/5 p-3 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-indigo-300">Stop {i + 1}</span>
+                    <span className="text-xs font-medium text-emerald-300">Stop {i + 1}</span>
                     {stopFields.length > 2 && (
                       <button type="button" onClick={() => removeStop(i)}
                         className="text-red-400/60 hover:text-red-400 transition-colors">
@@ -664,23 +664,23 @@ export function TripPlanner() {
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>
-                      <label className="text-[10px] text-[#8892b0] mb-0.5 block">City *</label>
+                      <label className="text-[10px] text-[var(--fg-muted)] mb-0.5 block">City *</label>
                       <input className="input-dark text-xs" placeholder="Bangkok"
                         {...multiForm.register(`stops.${i}.city`)} />
                     </div>
                     <div>
-                      <label className="text-[10px] text-[#8892b0] mb-0.5 block">Days</label>
+                      <label className="text-[10px] text-[var(--fg-muted)] mb-0.5 block">Days</label>
                       <input type="number" min={1} max={14} className="input-dark text-xs"
                         {...multiForm.register(`stops.${i}.days`, { valueAsNumber: true })} />
                     </div>
                   </div>
                   <div>
-                    <label className="text-[10px] text-[#8892b0] mb-0.5 block">Arrival date</label>
+                    <label className="text-[10px] text-[var(--fg-muted)] mb-0.5 block">Arrival date</label>
                     <input type="date" className="input-dark text-xs"
                       {...multiForm.register(`stops.${i}.date`)} />
                   </div>
                   <div>
-                    <label className="text-[10px] text-[#8892b0] mb-0.5 block">Notes (optional)</label>
+                    <label className="text-[10px] text-[var(--fg-muted)] mb-0.5 block">Notes (optional)</label>
                     <input className="input-dark text-xs" placeholder="focus on street food…"
                       {...multiForm.register(`stops.${i}.notes`)} />
                   </div>
@@ -691,17 +691,17 @@ export function TripPlanner() {
               </DndContext>
               <button type="button"
                 onClick={() => append({ city: "", days: 2, date: today, notes: "" })}
-                className="flex items-center gap-1 text-indigo-400 hover:text-indigo-300 text-sm transition-colors">
+                className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 text-sm transition-colors">
                 <Plus className="w-4 h-4" /> Add city
               </button>
               <div>
-                <label className="text-xs font-medium text-[#8892b0] mb-1 block">Interests</label>
+                <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Interests</label>
                 <input className="input-dark" placeholder="temples, food, adventure"
                   {...multiForm.register("interests")} />
               </div>
               {sharedFormFields(multiForm.register)}
               <button type="submit" disabled={streaming}
-                className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-60">
+                className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-60">
                 {streaming
                   ? <><RefreshCw className="w-4 h-4 animate-spin" /> Generating…</>
                   : <><Globe className="w-4 h-4" /> Plan Multi-city Trip</>}
@@ -713,36 +713,36 @@ export function TripPlanner() {
           {mode === "insurance" && (
             <form onSubmit={insuranceForm.handleSubmit(onInsuranceSubmit)} className="glass rounded-2xl p-5 space-y-4">
               <div>
-                <label className="text-xs font-medium text-[#8892b0] mb-1 block">Destination(s)</label>
+                <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Destination(s)</label>
                 <input className="input-dark" placeholder="Vietnam, Malaysia"
                   {...insuranceForm.register("destination")} />
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-[#8892b0] mb-1 block">Trip cost (USD)</label>
+                  <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Trip cost (USD)</label>
                   <input type="number" min={0} className="input-dark"
                     {...insuranceForm.register("trip_cost_usd", { valueAsNumber: true })} />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-[#8892b0] mb-1 block">Duration (days)</label>
+                  <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Duration (days)</label>
                   <input type="number" min={1} className="input-dark"
                     {...insuranceForm.register("duration_days", { valueAsNumber: true })} />
                 </div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-medium text-[#8892b0] mb-1 block">Travellers</label>
+                  <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Travellers</label>
                   <input type="number" min={1} className="input-dark"
                     {...insuranceForm.register("travelers", { valueAsNumber: true })} />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-[#8892b0] mb-1 block">Average age</label>
+                  <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Average age</label>
                   <input type="number" min={1} max={120} className="input-dark"
                     {...insuranceForm.register("traveler_age", { valueAsNumber: true })} />
                 </div>
               </div>
               <button type="submit" disabled={streaming}
-                className="w-full flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-60">
+                className="w-full flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-2.5 rounded-xl transition-colors disabled:opacity-60">
                 {streaming
                   ? <><RefreshCw className="w-4 h-4 animate-spin" /> Estimating…</>
                   : <><ShieldCheck className="w-4 h-4" /> Estimate Insurance</>}
@@ -753,14 +753,14 @@ export function TripPlanner() {
           {/* Quick examples (single mode only) */}
           {(mode === "plan") && (
             <div className="glass rounded-2xl p-4">
-              <p className="text-xs font-semibold text-[#8892b0] uppercase tracking-wider mb-3">Quick examples</p>
+              <p className="text-xs font-semibold text-[var(--fg-muted)] uppercase tracking-wider mb-3">Quick examples</p>
               <div className="space-y-2">
                 {EXAMPLES.map(ex => (
                   <button key={ex.city} type="button"
                     onClick={() => { setValue("city", ex.city); setValue("days", ex.days); setValue("interests", ex.interests); setValue("budget", ex.budget); setValue("travel_style", ex.style); }}
                     className="w-full text-left px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 transition-colors text-sm">
                     <span className="text-white font-medium">{ex.city}</span>
-                    <span className="text-[#8892b0] text-xs ml-2">{ex.days}d · {ex.style}</span>
+                    <span className="text-[var(--fg-muted)] text-xs ml-2">{ex.days}d · {ex.style}</span>
                   </button>
                 ))}
               </div>
@@ -771,14 +771,14 @@ export function TripPlanner() {
         {/* ══ Right: output ════════════════════════════════════════════════ */}
         <div className="glass rounded-2xl flex flex-col min-h-[350px] md:min-h-[600px] relative">
           {/* Tab bar */}
-          <div className="flex gap-1 p-3 border-b border-[#1e2540] flex-wrap">
+          <div className="flex gap-1 p-3 border-b border-[var(--border)] flex-wrap">
             {(["output", "refine", "history"] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={cn(
                   "px-3 py-1.5 text-sm font-medium rounded-lg transition-colors capitalize",
                   activeTab === tab
-                    ? "bg-indigo-600/20 text-indigo-300 border border-indigo-500/30"
-                    : "text-[#8892b0] hover:text-white"
+                    ? "bg-emerald-600/20 text-emerald-300 border border-emerald-500/30"
+                    : "text-[var(--fg-muted)] hover:text-white"
                 )}>
                 {tab === "history" ? `History (${trips.length})` : tab === "output" ? "Output" : "Refine"}
               </button>
@@ -813,26 +813,26 @@ export function TripPlanner() {
                   <div className="flex flex-col items-center justify-center h-full text-center gap-4 py-12">
                     {/* Illustrated plane + map */}
                     <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <circle cx="40" cy="40" r="38" fill="#1a1f36" stroke="#1e2540" strokeWidth="2"/>
-                      <circle cx="40" cy="40" r="24" fill="#131829" stroke="#1e2540" strokeWidth="1"/>
-                      <path d="M24 42 Q32 28 40 32 Q48 36 56 22" stroke="#6366f1" strokeWidth="1.5" fill="none" strokeDasharray="3 2" opacity="0.6"/>
-                      <circle cx="24" cy="42" r="2.5" fill="#818cf8"/>
-                      <circle cx="56" cy="22" r="2.5" fill="#c084fc"/>
+                      <circle cx="40" cy="40" r="38" fill="#17171b" stroke="#1f1f24" strokeWidth="2"/>
+                      <circle cx="40" cy="40" r="24" fill="#111114" stroke="#1f1f24" strokeWidth="1"/>
+                      <path d="M24 42 Q32 28 40 32 Q48 36 56 22" stroke="#10b981" strokeWidth="1.5" fill="none" strokeDasharray="3 2" opacity="0.6"/>
+                      <circle cx="24" cy="42" r="2.5" fill="#34d399"/>
+                      <circle cx="56" cy="22" r="2.5" fill="#10b981"/>
                       <g transform="translate(36,26) rotate(-30)">
-                        <path d="M0 0 L6 -3 L8 0 L6 3 Z" fill="#818cf8"/>
+                        <path d="M0 0 L6 -3 L8 0 L6 3 Z" fill="#34d399"/>
                         <path d="M2 -1 L0 -4 L3 -3 Z" fill="#6366f1"/>
                         <path d="M2 1 L0 4 L3 3 Z" fill="#6366f1"/>
                       </g>
                     </svg>
                     <div>
                       <p className="text-white font-medium mb-1">Your itinerary will appear here</p>
-                      <p className="text-[#8892b0] text-sm max-w-xs">
-                        Fill in the form and click <span className="text-indigo-400">Generate</span> — streamed live
+                      <p className="text-[var(--fg-muted)] text-sm max-w-xs">
+                        Fill in the form and click <span className="text-emerald-400">Generate</span> — streamed live
                       </p>
                     </div>
                     <div className="flex flex-wrap gap-2 justify-center">
                       {["Kyoto, Japan","Bali, Indonesia","Barcelona, Spain"].map(eg => (
-                        <span key={eg} className="text-[10px] border border-indigo-500/20 bg-indigo-600/5 text-indigo-400 rounded-full px-2 py-0.5">{eg}</span>
+                        <span key={eg} className="text-[10px] border border-emerald-500/20 bg-emerald-600/5 text-emerald-400 rounded-full px-2 py-0.5">{eg}</span>
                       ))}
                     </div>
                   </div>
@@ -861,7 +861,7 @@ export function TripPlanner() {
                         ? (
                           <>
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{output}</ReactMarkdown>
-                            <span className="inline-block w-1.5 h-4 bg-indigo-400 animate-pulse rounded ml-0.5" />
+                            <span className="inline-block w-1.5 h-4 bg-emerald-400 animate-pulse rounded ml-0.5" />
                           </>
                         )
                         : <MarkdownWithDayCopy content={output} />}
@@ -874,12 +874,12 @@ export function TripPlanner() {
             {/* ── Refine tab ── */}
             {activeTab === "refine" && (
               <div className="space-y-4">
-                <p className="text-[#8892b0] text-sm">Describe what you&apos;d like to change:</p>
+                <p className="text-[var(--fg-muted)] text-sm">Describe what you&apos;d like to change:</p>
                 <textarea rows={5} value={feedback} onChange={e => setFeedback(e.target.value)}
                   placeholder="Make Day 2 more relaxed, swap dinner for street food…"
                   className="input-dark resize-none" />
                 <button onClick={handleRefine} disabled={streaming || !output || !feedback.trim()}
-                  className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-60 transition-colors">
+                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-60 transition-colors">
                   <Send className="w-4 h-4" /> Refine Itinerary
                 </button>
               </div>
@@ -889,7 +889,7 @@ export function TripPlanner() {
             {activeTab === "history" && (
               <div className="space-y-3">
                 {trips.length === 0 ? (
-                  <p className="text-[#8892b0] text-sm text-center py-8">
+                  <p className="text-[var(--fg-muted)] text-sm text-center py-8">
                     No saved trips yet. Generate an itinerary and click &quot;Save&quot;.
                   </p>
                 ) : (
@@ -897,13 +897,13 @@ export function TripPlanner() {
                     <div key={t.id} className="flex items-center justify-between gap-3 rounded-xl bg-white/5 border border-white/10 px-4 py-3">
                       <div>
                         <p className="text-white font-medium text-sm">{t.title}</p>
-                        <p className="text-xs text-[#8892b0]">
+                        <p className="text-xs text-[var(--fg-muted)]">
                           {new Date(t.savedAt).toLocaleDateString()}
                         </p>
                       </div>
                       <div className="flex gap-2">
                         <button onClick={() => handleLoadTrip(t.id)}
-                          className="text-xs text-indigo-400 hover:text-indigo-300 border border-indigo-500/30 rounded-lg px-2.5 py-1 transition-colors">
+                          className="text-xs text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded-lg px-2.5 py-1 transition-colors">
                           Load
                         </button>
                         <button onClick={() => remove(t.id)}
@@ -932,7 +932,7 @@ function ActionBtn({
         "flex items-center gap-1 text-xs px-2 py-1 rounded-lg border transition-colors",
         active
           ? "border-emerald-500/30 text-emerald-400 bg-emerald-500/10"
-          : "border-white/10 text-[#8892b0] hover:text-white hover:border-white/20"
+          : "border-white/10 text-[var(--fg-muted)] hover:text-white hover:border-white/20"
       )}>
       <Icon className="w-3.5 h-3.5" /> {label}
     </button>

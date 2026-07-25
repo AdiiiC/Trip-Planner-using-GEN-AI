@@ -16,6 +16,7 @@ const cspHeader = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  allowedDevOrigins: ["*.preview.emergentagent.com", "*.preview.emergentcf.cloud", "*.emergentcf.cloud"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "upload.wikimedia.org" },

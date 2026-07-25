@@ -6,26 +6,39 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
+  const { theme, setTheme, resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
 
-  // Avoid hydration mismatch
   useEffect(() => setMounted(true), []);
   if (!mounted) return <div className="w-8 h-8" />;
 
-  const isDark = theme === "dark";
+  const active = theme ?? resolvedTheme;
+  const isDark = active !== "light";
 
   return (
     <button
       onClick={() => setTheme(isDark ? "light" : "dark")}
+      data-testid="theme-toggle"
       className={cn(
-        "flex items-center justify-center w-8 h-8 rounded-lg border transition-all",
-        "border-white/10 text-[#8892b0] hover:text-white hover:border-indigo-500/40 hover:bg-indigo-600/10"
+        "relative inline-flex h-8 w-8 items-center justify-center rounded-md border border-[var(--border)] bg-[var(--surface-2)] text-[var(--fg-muted)] transition-colors hover:text-[var(--fg)] hover:border-[var(--border-strong)]"
       )}
       aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
       title={isDark ? "Light mode" : "Dark mode"}
     >
-      {isDark ? <Sun className="w-3.5 h-3.5" /> : <Moon className="w-3.5 h-3.5" />}
+      <Sun
+        className={cn(
+          "h-3.5 w-3.5 transition-all",
+          isDark ? "rotate-0 scale-100" : "-rotate-90 scale-0 absolute"
+        )}
+        strokeWidth={1.75}
+      />
+      <Moon
+        className={cn(
+          "h-3.5 w-3.5 transition-all",
+          isDark ? "rotate-90 scale-0 absolute" : "rotate-0 scale-100"
+        )}
+        strokeWidth={1.75}
+      />
     </button>
   );
 }

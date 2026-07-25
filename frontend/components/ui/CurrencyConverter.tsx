@@ -24,41 +24,41 @@ export function CurrencyConverter() {
       <p className="text-sm font-semibold text-white mb-3">Currency Converter</p>
       <div className="flex items-end gap-2 flex-wrap">
         <div className="flex-1 min-w-[100px]">
-          <label className="text-[10px] text-[#8892b0] mb-1 block">Amount</label>
+          <label className="text-[10px] text-[var(--fg-muted)] mb-1 block">Amount</label>
           <input type="number" min={0} value={amount}
             onChange={(e) => setAmount(+e.target.value)}
             className="input-dark" />
         </div>
         <div className="w-24">
-          <label className="text-[10px] text-[#8892b0] mb-1 block">From</label>
+          <label className="text-[10px] text-[var(--fg-muted)] mb-1 block">From</label>
           <select value={from} onChange={(e) => setFrom(e.target.value)} className="input-dark">
             {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
           </select>
         </div>
         <motion.button whileTap={{ scale: 0.9, rotate: 180 }} transition={spring}
           onClick={swap} aria-label="Swap currencies"
-          className="mb-0.5 p-2 rounded-lg border border-[#1e2540] text-[#8892b0] hover:text-white hover:border-indigo-500/40 transition-colors">
+          className="mb-0.5 p-2 rounded-lg border border-[var(--border)] text-[var(--fg-muted)] hover:text-white hover:border-emerald-500/40 transition-colors">
           <ArrowLeftRight className="w-4 h-4" />
         </motion.button>
         <div className="w-24">
-          <label className="text-[10px] text-[#8892b0] mb-1 block">To</label>
+          <label className="text-[10px] text-[var(--fg-muted)] mb-1 block">To</label>
           <select value={to} onChange={(e) => setTo(e.target.value)} className="input-dark">
             {CURRENCIES.map((c) => <option key={c}>{c}</option>)}
           </select>
         </div>
         <button onClick={run} disabled={convert.isPending}
-          className="mb-0.5 flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-60">
+          className="mb-0.5 flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-60">
           {convert.isPending ? <RefreshCw className="w-4 h-4 animate-spin" /> : "Convert"}
         </button>
       </div>
 
       {convert.data && (
         <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-          className="mt-4 pt-4 border-t border-[#1e2540]">
-          <p className="text-2xl font-bold text-white">
+          className="mt-4 pt-4 border-t border-[var(--border)]">
+          <p className="font-display text-3xl leading-tight tracking-tight text-[var(--fg)]">
             <CountUp value={convert.data.converted} decimals={2} /> {convert.data.to}
           </p>
-          <p className="text-xs text-[#8892b0] mt-1">
+          <p className="text-xs text-[var(--fg-muted)] mt-1">
             1 {convert.data.from} = {convert.data.rate.toFixed(4)} {convert.data.to}
           </p>
         </motion.div>

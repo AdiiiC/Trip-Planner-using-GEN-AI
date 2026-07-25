@@ -24,7 +24,7 @@ export function QRCodeButton({ url, title = "Share trip" }: Props) {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border border-white/10 text-[#8892b0] hover:text-white hover:border-white/20 transition-colors"
+        className="flex items-center gap-1 text-xs px-2 py-1 rounded-lg border border-white/10 text-[var(--fg-muted)] hover:text-white hover:border-white/20 transition-colors"
         title="Show QR code"
       >
         <QrCode className="w-3.5 h-3.5" />
@@ -47,26 +47,26 @@ export function QRCodeButton({ url, title = "Share trip" }: Props) {
               initial={{ opacity: 0, scale: 0.9, y: 20 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 glass rounded-2xl p-6 w-72 shadow-2xl border border-indigo-500/20"
+              className="fixed z-50 left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 glass rounded-2xl p-6 w-72 shadow-2xl border border-emerald-500/20"
             >
               <div className="flex items-center justify-between mb-4">
                 <p className="text-white font-semibold text-sm">{title}</p>
-                <button onClick={() => setOpen(false)} className="text-[#8892b0] hover:text-white transition-colors">
+                <button onClick={() => setOpen(false)} className="text-[var(--fg-muted)] hover:text-white transition-colors">
                   <X className="w-4 h-4" />
                 </button>
               </div>
 
               {/* QR code */}
               <div className="bg-white rounded-xl p-3 mb-4 flex justify-center">
-                <QRCodeSVG value={url} size={200} bgColor="#ffffff" fgColor="#0c0f1a" level="M" />
+                <QRCodeSVG value={url} size={200} bgColor="#ffffff" fgColor="var(--bg)" level="M" />
               </div>
 
-              <p className="text-[#8892b0] text-xs text-center mb-3">Scan to open on another device</p>
+              <p className="text-[var(--fg-muted)] text-xs text-center mb-3">Scan to open on another device</p>
 
               {/* Copy link */}
               <button
                 onClick={copyUrl}
-                className="w-full flex items-center justify-center gap-2 text-sm py-2 rounded-xl border border-white/10 text-[#8892b0] hover:text-white hover:border-indigo-500/40 transition-colors"
+                className="w-full flex items-center justify-center gap-2 text-sm py-2 rounded-xl border border-white/10 text-[var(--fg-muted)] hover:text-white hover:border-emerald-500/40 transition-colors"
               >
                 {copied ? <><Check className="w-3.5 h-3.5 text-emerald-400" /> Copied!</> : <><Copy className="w-3.5 h-3.5" /> Copy link</>}
               </button>
