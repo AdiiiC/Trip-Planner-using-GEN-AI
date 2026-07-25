@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import uuid
 from typing import AsyncIterator
 
@@ -681,6 +682,9 @@ async def create_share(request: Request, body: ShareInput):
 @app.get("/api/share/{share_id}")
 @limiter.limit("120/minute")
 async def get_share(request: Request, share_id: str):
+    # Fast-fail probes: our IDs are always 10 lowercase hex chars
+    if not re.fullmatch(r"[0-9a-f]{10}", share_id):
+        raise HTTPException(status_code=404, detail="Shared trip not found")
     shares = _load_shares()
     entry = shares.get(share_id)
     if not entry:
