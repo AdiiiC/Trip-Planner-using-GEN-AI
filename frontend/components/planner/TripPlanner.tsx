@@ -593,8 +593,16 @@ export function TripPlanner() {
     } catch (e) {
       // Fallback to old fragment URL if backend share fails
       const url = buildShareUrl(city, days, output);
-      await navigator.clipboard.writeText(url);
-      toast.error("Public share unavailable — copied a self-contained link instead");
+      try {
+        await navigator.clipboard.writeText(url);
+        toast.error("Public share unavailable — copied a self-contained link instead");
+      } catch {
+        // Both backend + clipboard failed — surface the link in the toast so the user can copy manually
+        toast.error("Public share unavailable", {
+          description: url,
+          duration: 8000,
+        });
+      }
       setShared(true);
       if (sharedTimer.current) clearTimeout(sharedTimer.current);
       sharedTimer.current = setTimeout(() => setShared(false), 3000);

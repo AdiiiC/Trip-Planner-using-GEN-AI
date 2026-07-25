@@ -79,3 +79,21 @@ None (no auth in this app).
   - Frontend: new route `/share/[id]` (server-rendered) with CityHero + prose-trip markdown + "Draft a similar trip" CTA.
   - Dynamic OG image at `/share/[id]/opengraph-image` (next/og edge runtime) with city photo + Instrument-Serif title baked in.
   - `handleShare` in TripPlanner now POSTs to `/api/share`, copies the public URL to clipboard, and shows a Sonner toast (Open button) — falls back to the old fragment-encoded URL if the backend share fails.
+
+## Code-review polish pass (iter-6, 2026-01-25)
+### Applied (targeted, small)
+- `lib/tripHistory.ts` + `TripPlanner.useRecentCities`: `console.debug` on all localStorage empty catches (previously fully silent)
+- `TripPlanner.handleShare`: outer `console.warn` wrapped in `NODE_ENV !== "production"` guard; clipboard write in success path now `try/catch` — headless clipboard-denied no longer throws `NotAllowedError` unhandledRejection; fallback path also guarded so a double-failure (backend + clipboard) never throws
+- `FlightTracker` + `SightseeingExplorer`: sources lists now `key={url}` (stable) with named-comment silent-fail on malformed URLs
+- `app/share/[id]/opengraph-image.tsx`: `params` now typed as `Promise<{id:string}>` and awaited per Next 15 async API
+- `backend/main.py`: `/api/share/{id}` guarded by `^[0-9a-f]{10}$` regex — non-matching IDs 404 fast without loading the JSON file
+
+### Skipped (per no-unrelated-refactors rule)
+- Adding module-scope constants / browser globals (`localStorage`, `KeyboardEvent`, `AbortController`) to useEffect deps — react-hooks/exhaustive-deps does NOT require these
+- Refactoring 700-line TripPlanner into sub-modules — explicit guideline violation
+- Python `is None` → `== None` — PEP 8 recommends `is None`, review had this reversed
+- `agents/search.py:58 _exa_client undefined` claim — false positive; declared at module level (line 47)
+- localStorage "security" claims for public trip-history data — no PII involved
+
+### Test result
+- iter-6: backend 10/10, frontend 100% regression on all critical paths, native `<input type=date>` count = 0 across /flights, /planner-single, /planner-multi, /hotels. Both known bugs verified fixed.
