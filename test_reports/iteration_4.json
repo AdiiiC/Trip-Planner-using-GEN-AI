@@ -1,0 +1,24 @@
+{
+  "summary": "Frontend-only validation of the new CityHero weather + season chips overlay. Tested /sightseeing (Kyoto) and /planner (Barcelona) on desktop, plus mobile viewport (375x812) for Kyoto, plus /hotels smoke check. All acceptance criteria pass: chips container renders top-right, weather chip shows temperature + description, season chip shows tier label + Best months, and layout remains readable on mobile with chips staying within hero bounds. No JS/hydration errors thrown by CityHero on any page.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "CityHero on mobile (375px)", "issues": ["Chips container overlaps the upper edge of the hero image; only one chip is comfortably visible above the fold within the hero due to short mobile aspect ratio. Not a failure per spec (silent-fail acceptable), but consider stacking chips more compactly or reducing font-size on <sm breakpoints."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "CityHero.tsx line 278: `styles.replace('bg-', 'bg-').replace(/\\/10/g, '/12')` is a no-op for the first replace and relies on runtime string mangling of Tailwind classes. Tailwind's JIT does not detect dynamically-composed class names — the /12 variants may not be generated in production. Prefer static class literals per tier.",
+    "CityHero.tsx: `weather` and `bestTime` useEffects share the same trigger conditions and cleanup pattern — could be extracted to a single hook `useCityHeroSignals(city)` to reduce duplication.",
+    "SeasonChip currentScore defaults to 50 (=> 'shoulder') when monthData is missing — this may render misleading info if LLM returns no month entry for the current month. Consider returning null and hiding the chip in that case."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request)", "frontend": "100%"},
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "New testids validated: city-hero-chips, city-hero-weather, city-hero-season. Kyoto returned '29° Clear' + 'Shoulder season · BEST: NOV, OCT, APR'. Barcelona (planner) returned '30° Partly cloudy' + 'Peak season now · BEST: JUN, MAY, SEP'. Note: on /planner the fastest way to seed the city is the 'Quick examples' buttons (Kyoto/Barcelona/Bali/Da Nang); typing into the CityAutocomplete input directly via page.fill worked for value but Generate button then didn't trigger — using quick example is more reliable. /hotels loaded cleanly with no errors. The only console error observed was an unrelated CSP worker-src violation (blob worker blocked) — not caused by CityHero. Cookie consent banner overlaps the bottom of the page on all routes (expected per spec)."
+}
