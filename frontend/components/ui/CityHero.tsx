@@ -256,18 +256,29 @@ function SeasonChip({ bt }: { bt: BestTime }) {
   const tier =
     s >= 75 ? "peak" : s >= 55 ? "good" : s >= 35 ? "shoulder" : "off";
 
+  // Static class literals — Tailwind JIT needs to see full class names
   const config = {
-    peak:     { label: "Peak season now",    Icon: Sparkles,      color: "emerald" },
-    good:     { label: "Great to visit",     Icon: TrendingUp,    color: "emerald" },
-    shoulder: { label: "Shoulder season",    Icon: Minus,         color: "amber" },
-    off:      { label: "Low season now",     Icon: TrendingDown,  color: "rose" },
+    peak: {
+      label: "Peak season now",
+      Icon: Sparkles,
+      cls: "border-emerald-500/30 bg-emerald-500/12 text-emerald-300",
+    },
+    good: {
+      label: "Great to visit",
+      Icon: TrendingUp,
+      cls: "border-emerald-500/30 bg-emerald-500/12 text-emerald-300",
+    },
+    shoulder: {
+      label: "Shoulder season",
+      Icon: Minus,
+      cls: "border-amber-500/30 bg-amber-500/12 text-amber-300",
+    },
+    off: {
+      label: "Low season now",
+      Icon: TrendingDown,
+      cls: "border-rose-500/30 bg-rose-500/12 text-rose-300",
+    },
   }[tier];
-
-  const styles = {
-    emerald: "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
-    amber:   "border-amber-500/30 bg-amber-500/10 text-amber-300",
-    rose:    "border-rose-500/30 bg-rose-500/10 text-rose-300",
-  }[config.color as "emerald" | "amber" | "rose"];
 
   const shortBest = bt.best_months.slice(0, 3).map((m) => m.slice(0, 3)).join(", ");
 
@@ -275,7 +286,7 @@ function SeasonChip({ bt }: { bt: BestTime }) {
     <div
       className={cn(
         "inline-flex flex-col items-end gap-0.5 rounded-lg border backdrop-blur-md px-3 py-1.5 shadow-[0_10px_30px_-15px_rgba(0,0,0,0.6)]",
-        styles.replace("bg-", "bg-").replace(/\/10/g, "/12")
+        config.cls
       )}
       data-testid="city-hero-season"
     >

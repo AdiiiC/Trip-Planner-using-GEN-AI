@@ -57,3 +57,12 @@ None (no auth in this app).
 ### Test result
 - Backend: 12/12 pytest (iter3_all.xml)
 - Frontend: 100% acceptance criteria across 8 routes, 0 pageerrors
+
+## Follow-up iteration 4 (2026-01-25)
+### Delivered
+- **Weather + Season chips on CityHero**: top-right overlay shows live temperature + short description (via /api/weather → wttr.in) and a season chip tier (Peak/Great/Shoulder/Low) with the three best months (via /api/best-time → Groq LLM); both silent-fail; sessionStorage cached (10 min); works on /sightseeing and /planner heroes.
+- Kyoto returned 29° Clear · Shoulder season · BEST: NOV, OCT, APR. Barcelona: 30° Partly cloudy · Peak season now · BEST: JUN, MAY, SEP.
+- Fixed dynamic-class Tailwind JIT concern by moving to static class literals per tier.
+
+### Test result (iter-4)
+- Frontend: 100% (all acceptance criteria across /sightseeing, /planner, /hotels, mobile 375px). No JS errors from CityHero.
