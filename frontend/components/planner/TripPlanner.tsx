@@ -20,6 +20,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import confetti from "canvas-confetti";
 import { CityAutocomplete } from "@/components/ui/CityAutocomplete";
+import { CityHero } from "@/components/ui/CityHero";
 import { BackToTop } from "@/components/ui/BackToTop";
 import { QRCodeButton } from "@/components/ui/QRCodeButton";
 import Image from "next/image";
@@ -839,21 +840,15 @@ export function TripPlanner() {
                 )}
                 {(output || streaming) && (
                   <>
-                    {/* Destination hero image */}
-                    {heroUrl && !streaming && (
+                    {/* Editorial city hero — Wikipedia lead image with overlay caption */}
+                    {city && !streaming && (
                       <motion.div
-                        initial={{ opacity: 0, scale: 1.02 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        className="relative mb-5 rounded-xl overflow-hidden h-40 w-full"
+                        initial={{ opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.5 }}
+                        className="mb-6"
                       >
-                        <Image
-                          src={heroUrl}
-                          alt={city}
-                          fill
-                          className="object-cover"
-                          unoptimized
-                          onError={e => ((e.target as HTMLImageElement).style.display = "none")}
-                        />
+                        <CityHero city={city} />
                       </motion.div>
                     )}
                     <div className="prose-trip text-sm">

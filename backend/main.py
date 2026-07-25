@@ -561,3 +561,61 @@ async def export_ics_endpoint(request: Request, body: ExportInput):
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=_safe_error(exc, "export-ics"))
+
+
+
+# ── city photography (free · Wikipedia lead image + Wikimedia thumbs) ──────
+from agents.cache import search_cache as _photo_cache  # reuse
+
+_PHOTO_CACHE_TTL = 60 * 60 * 24  # 24h
+
+
+async def _wiki_lead_image(query: str) -> str | None:
+    """Fetch a city hero image from Wikipedia's REST summary API. Free, no key."""
+    q = query.strip().replace(" ", "_")
+    if not q:
+        return None
+    url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{q}"
+    try:
+        async with httpx.AsyncClient(timeout=8, follow_redirects=True) as client:
+            r = await client.get(url, headers={"User-Agent": "Wayfare/2.0 (contact@wayfare.app)"})
+            if r.status_code != 200:
+                return None
+            data = r.json()
+            src = (data.get("originalimage") or {}).get("source") or (data.get("thumbnail") or {}).get("source")
+            return src
+    except Exception:
+        return None
+
+
+@app.get("/api/city-photo")
+@limiter.limit("60/minute")
+async def city_photo(request: Request, city: str, country: str | None = None):
+    """
+    Return a hot-linkable hero image URL for a city.
+    Strategy: Wikipedia lead image (with country disambiguation), fallback Unsplash Source URL.
+    """
+    city_norm = (city or "").strip()
+    if not city_norm:
+        raise HTTPException(status_code=400, detail="city query param is required")
+
+    cache_key = f"city-photo::{city_norm.lower()}::{(country or '').lower()}"
+    cached = _photo_cache.get(cache_key)
+    if cached:
+        return cached
+
+    # Try Wikipedia with country disambiguation first, then plain city
+    src = None
+    if country:
+        src = await _wiki_lead_image(f"{city_norm}, {country}")
+    if not src:
+        src = await _wiki_lead_image(city_norm)
+
+    # Fallback: Unsplash Source URL (deprecated but still redirects to a random photo)
+    if not src:
+        from urllib.parse import quote_plus
+        src = f"https://source.unsplash.com/1600x900/?{quote_plus(city_norm)},travel,city"
+
+    payload = {"city": city_norm, "url": src, "source": "wikipedia" if "wikipedia" in (src or "") or "wikimedia" in (src or "") else "unsplash"}
+    _photo_cache.set(cache_key, payload)
+    return payload

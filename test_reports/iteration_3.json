@@ -1,0 +1,31 @@
+{
+  "summary": "Iter-3 wide validation of Wayfare follow-up features (live Groq/Serper keys, Wikipedia city hero, shadcn DateRangePicker). ALL requested acceptance criteria pass. Backend: 12/12 pytest (4 new + 8 existing). /api/health reports groq:true & serper:true. /api/city-photo?city=Kyoto&country=Japan returns upload.wikimedia.org URL in <200ms (well under 5s). /api/plan streams SSE — first chunk arrives <1s, >200 chars collected almost immediately, real Kyoto itinerary content confirmed via curl. Frontend: /hotels — hotel-date-range button visible with 'MMM d → MMM d, yyyy' label; clicking opens popover with date-range-calendar showing TWO months (2 [role=grid]) side-by-side; picking day-5 & day-9 produced 9-night range with 16 emerald-bg cells (range highlight); label updated to 'Jul 25 → Aug 3, 2026' and nights badge '9N' present; native <input type='date'> COUNT=0 on /hotels; hotel-guests/rooms/tier/search-btn all present; date-range-clear exists inside popover. /sightseeing — typing 'Kyoto' + Explore renders [data-testid='city-hero-kyoto'] with city-hero-image whose src is upload.wikimedia.org (Kinkaku-ji, naturalWidth=3840) after ~4s. /planner — entering 'Kyoto' + Generate renders same city-hero-kyoto above streaming markdown itinerary (>4400 chars streamed, real content with Day 1 – Traditional Kyoto, Kiyomizu-dera, Gion, etc.). Regressions: all 8 routes (/, /planner, /budget, /sightseeing, /hotels, /flights, /restaurants, /visa) render Instrument Serif H1 with 0 pageerrors; ⌘K opens CommandPalette; theme-toggle present and clickable.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/test_api.py",
+    "/app/test_reports/pytest/iter3_all.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "PlanInput schema uses `city` (not `destination`) — frontend must send `city`. Confirmed frontend does this correctly (streaming works end-to-end).",
+    "DateRangePicker default value is preset to today→tomorrow, so the trigger label is never empty. This is UX-friendly but tests that expect an empty initial label should assert the current preset instead.",
+    "CookieConsent banner overlaps the bottom of tool pages until Accept is clicked (expected per main agent). Tests handled this by dismissing when needed."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_new_features.py (new)"
+  ],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "100% (all iter-3 acceptance criteria met, 0 pageerrors across 8 routes)"},
+  "test_credentials": "N/A - no auth in scope",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-3 is a full pass. Evidence: /api/health services={groq:true,serper:true,exa:false,rapidapi:false}. /api/city-photo returns https://upload.wikimedia.org/wikipedia/commons/thumb/6/6b/Kyoto%2C_Japan_%2849667780482%29.jpg/3840px-... in ~130ms. /api/plan SSE streams 'data: {\"content\": ...}' chunks for Kyoto 3d itinerary starting with '## Day 1 – Northern Kyoto Delights'. On /hotels: 0 native date inputs, DateRangePicker two-month popover renders 38 selectable day buttons and applies emerald bg to range cells, nights badge updates live (e.g. '9N'). On /sightseeing + /planner: [data-testid='city-hero-kyoto'] + [data-testid='city-hero-image'] uses upload.wikimedia.org src (naturalWidth=3840). Planner Generate streams >4400 chars of real markdown in ~15s. All 8 tool routes render H1 with 0 pageerrors; ⌘K opens palette. Nothing to fix — the follow-up is complete.",
+  "rca of the issue": "N/A — no failures. Note for future testing: DateRangePicker default value is pre-populated (today→tomorrow), so 'initial empty label' assertions will fail; use 'Jul 25 → Jul 26, 2026' style pattern instead. Also PlanInput.city (not .destination) is the required field name."
+}

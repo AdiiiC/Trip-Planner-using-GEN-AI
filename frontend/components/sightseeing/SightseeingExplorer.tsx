@@ -9,6 +9,7 @@ import type { Attraction, NearbyPlace, SightseeingResult } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { CityAutocomplete } from "@/components/ui/CityAutocomplete";
+import { CityHero } from "@/components/ui/CityHero";
 
 const CATEGORY_COLORS: Record<string, string> = {
   heritage:    "bg-amber-500/20 text-amber-300 border-amber-500/30",
@@ -93,6 +94,9 @@ export function SightseeingExplorer() {
       <AnimatePresence>
         {result && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
+            {/* Editorial city hero */}
+            <CityHero city={result.city} country={country || undefined} />
+
             {/* Header */}
             <div className="flex items-center justify-between flex-wrap gap-3">
               <div>

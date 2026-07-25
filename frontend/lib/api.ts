@@ -247,4 +247,16 @@ export const api = {
     if (!res.ok) throw new Error("Export failed");
     return res.blob();
   },
+
+  getCityPhoto: async (city: string, country = ""): Promise<{ city: string; url: string; source: string }> => {
+    const key = `tripmind_cache:/api/city-photo:${city.toLowerCase()}::${country.toLowerCase()}`;
+    const cached = getCached<{ city: string; url: string; source: string }>(key);
+    if (cached !== null) return cached;
+    const qs = new URLSearchParams({ city, ...(country ? { country } : {}) }).toString();
+    const res = await fetch(`${BASE}/api/city-photo?${qs}`);
+    if (!res.ok) throw new Error("City photo failed");
+    const data = await res.json();
+    setCached(key, data);
+    return data;
+  },
 };
