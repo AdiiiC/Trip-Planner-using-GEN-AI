@@ -10,9 +10,8 @@ export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
-  if (!mounted) return <div className="w-8 h-8" />;
 
-  const active = theme ?? resolvedTheme;
+  const active = mounted ? (theme ?? resolvedTheme) : "dark";
   const isDark = active !== "light";
 
   return (

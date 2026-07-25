@@ -1,0 +1,35 @@
+{
+  "summary": "Retest of hydration-dependent controls after iter-1 fixes (allowedDevOrigins broadened, Sentry init no-op without DSN, ThemeToggle no longer gated on mounted). ALL PREVIOUSLY FAILING FLOWS NOW PASS. Theme toggle switches document.documentElement data-theme from 'dark' to 'light'. Navbar 'More' dropdown reveals exactly 4 items linking to /flights, /hotels, /restaurants, /visa. CommandPalette opens via ⌘K, typing 'plan' filters to a single item (Trip Planner), Enter navigates to /planner, and ESC closes the palette. Landing page hero + 7 surface cards render. All 7 tool pages (/planner /budget /sightseeing /hotels /flights /restaurants /visa) render their Instrument Serif H1 without runtime JS errors.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Hotel Finder date fields", "issue": "Still uses native <input type='date'> instead of shadcn Calendar/Popover per design brief. Explicitly acknowledged as deferred P2 by main agent — reported for tracking only, NOT a fail.", "selector": "input[type='date']", "priority": "P2-deferred"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "All (dev runtime, non-blocking)", "issues": [
+        "CSP still blocks https://static.cloudflareinsights.com/beacon.min.js — dev-only console noise (explicitly acknowledged as expected).",
+        "HMR websocket 502 noise remains (dev-only, expected).",
+        "font-preload warnings for 4 woff2 files (Instrument Serif + Geist) — cosmetic dev warning; likely due to Next font optimizer preloading fonts not referenced above-the-fold."
+      ]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "None blocking. (Optional P2) Replace native date inputs on /hotels with shadcn Calendar+Popover.",
+    "(Optional cleanup) Silence CSP + font-preload dev warnings."
+  ],
+  "critical_code_review_comments": [
+    "Hydration fix is confirmed working — theme_toggle count=1, nav-more dropdown opens with 4 items, ⌘K opens palette, Enter routes correctly, ESC closes.",
+    "Native <input type='date'> on /hotels remains inconsistent with design brief (deferred by main agent)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped per request)", "frontend": "100%"},
+  "test_credentials": "N/A - no auth in scope",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter-2 confirmed all 3 iter-1 hydration blockers are resolved. Evidence from Playwright run: theme_toggle: initial='dark' after='light'; nav_more: 4 items [Flights→/flights, Hotels→/hotels, Restaurants→/restaurants, Visa→/visa]; cmd_palette: opened=1, items filtered to 1 for 'plan', Enter navigated to /planner; cmd_esc: opened=1 closedAfterEsc=1; landing hero 'A quieter way to plan travel.' + 7 surface cards; all 7 tool pages render with Instrument Serif H1, no pageerrors. Remaining known items (per main agent): native date input on /hotels (P2), CSP-blocked cloudflare beacon (dev), HMR 502 noise (dev), Groq/Serper 4xx (expected). Nothing to retest.",
+  "rca of the issue": "Iter-1 blockers fully mitigated by: (a) broadening allowedDevOrigins in next.config.ts so cross-origin dev HMR/chunk fetches from cluster-XX.preview.emergentagent.com are permitted; (b) making Sentry client init a no-op when SENTRY_DSN is absent (previously the DSN-less init crashed during hydration on Next 15, aborting the client tree silently); (c) removing the mounted-gate on ThemeToggle so it renders SSR-safe and is interactive on first paint. Verification: Playwright cold navigation now finds [data-testid=theme-toggle], [data-testid=nav-more], and [data-testid=command-palette-input] within default timeouts, and interactions produce the expected DOM/URL changes."
+}

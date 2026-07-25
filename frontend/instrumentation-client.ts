@@ -1,18 +1,16 @@
-// This file configures the initialization of Sentry on the client.
-// The added config here will be used whenever a users loads a page in their browser.
-// https://docs.sentry.io/platforms/javascript/guides/nextjs/
-
+// Sentry client-side init. Bails out gracefully when no DSN is provided (e.g., preview env).
 import * as Sentry from "@sentry/nextjs";
 
-Sentry.init({
-  dsn: "https://2de0921ae4f9d4fb79ef1b9b80e65179@o4511791571795968.ingest.us.sentry.io/4511791598338048",
+const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
 
-  dataCollection: {
-    // To disable sending user data and HTTP bodies, uncomment the lines below. For more info visit:
-    // https://docs.sentry.io/platforms/javascript/guides/nextjs/configuration/options/#dataCollection
-    userInfo: false,
-    httpBodies: [],
-  },
-});
+if (dsn) {
+  Sentry.init({
+    dsn,
+    dataCollection: {
+      userInfo: false,
+      httpBodies: [],
+    },
+  });
+}
 
 export const onRouterTransitionStart = Sentry.captureRouterTransitionStart;
