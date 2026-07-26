@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { PlusCircle, Trash2, Calculator, RefreshCw, ChevronDown, ChevronUp, Info, ShieldCheck, Search } from "lucide-react";
+import { PlusCircle, Trash2, Calculator, RefreshCw, ChevronDown, ChevronUp, Info, ShieldCheck, Search, ExternalLink } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { BudgetInput, BudgetResult, VisaCheckResult } from "@/lib/types";
@@ -240,11 +240,15 @@ export function BudgetCalculator() {
                 <p className="text-xs text-[var(--fg-muted)]">
                   Enter how many INR = 1 unit of each currency
                 </p>
-                <button type="button" onClick={fillLiveRates} disabled={loadingForex}
-                  className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded-lg px-2 py-1 transition-colors">
-                  <RefreshCw className={cn("w-3 h-3", loadingForex && "animate-spin")} />
-                  {loadingForex ? "Fetching…" : "Fill from Orient Exchange"}
-                </button>
+                <a
+                  href="https://www.orientexchange.in/moneychangelist"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-xs text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded-lg px-2 py-1 transition-colors"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  View live rates on Orient Exchange
+                </a>
               </div>
               <div className="grid sm:grid-cols-2 gap-2">
                 {exRates.fields.map((f, i) => (
@@ -272,12 +276,12 @@ export function BudgetCalculator() {
                 <PlusCircle className="w-4 h-4" /> Add currency
               </button>
               <p className="text-[10px] text-[var(--fg-muted)]/60 mt-2">
-                Rates sourced from{" "}
-                <a href="https://www.orientexchange.in" target="_blank" rel="noopener noreferrer"
+                Check live rates at{" "}
+                <a href="https://www.orientexchange.in/moneychangelist" target="_blank" rel="noopener noreferrer"
                   className="text-emerald-400/70 hover:text-emerald-400 underline underline-offset-2">
                   orientexchange.in
                 </a>
-                {" "}· updated on page load
+                {" "}and enter them above.
               </p>
             </SectionCard>
 
