@@ -257,7 +257,7 @@ export function BudgetCalculator() {
                     </Field>
                     <Field className="flex-1">
                       <Label>Rate to INR</Label>
-                      <input type="number" step="any" className="input-dark"
+                      <input type="number" inputMode="decimal" step="any" className="input-dark"
                         {...register(`exchange_rates.${i}.rate_to_inr`, { valueAsNumber: true })} />
                     </Field>
                     <button type="button" onClick={() => exRates.remove(i)}
@@ -301,7 +301,7 @@ export function BudgetCalculator() {
                     </Field>
                     <Field className="w-36">
                       <Label>Price (₹)</Label>
-                      <input type="number" className="input-dark"
+                      <input type="number" inputMode="decimal" className="input-dark"
                         {...register(`flights.${i}.price_inr`, { valueAsNumber: true })} />
                     </Field>
                     <button type="button" onClick={() => flights.remove(i)} className="mb-0.5 text-red-400/60 hover:text-red-400">
@@ -334,7 +334,7 @@ export function BudgetCalculator() {
                         </Field>
                         <Field className="w-36">
                           <Label>Total Cost (₹)</Label>
-                          <input type="number" className="input-dark"
+                          <input type="number" inputMode="decimal" className="input-dark"
                             {...register(`accommodations.${i}.total_cost_inr`, { valueAsNumber: true })} />
                         </Field>
                         <Field className="w-36">
@@ -440,7 +440,7 @@ export function BudgetCalculator() {
                       </Field>
                       <Field className="w-32">
                         <Label>Amount</Label>
-                        <input type="number" className="input-dark"
+                        <input type="number" inputMode="decimal" className="input-dark"
                           {...register(`sightseeing.${i}.amount`, { valueAsNumber: true })} />
                       </Field>
                       <Field className="w-28">
@@ -473,7 +473,7 @@ export function BudgetCalculator() {
                     </Field>
                     <Field className="w-32">
                       <Label>Amount</Label>
-                      <input type="number" className="input-dark"
+                      <input type="number" inputMode="decimal" className="input-dark"
                         {...register(`extras.${i}.amount`, { valueAsNumber: true })} />
                     </Field>
                     <Field className="w-28">
@@ -499,7 +499,7 @@ export function BudgetCalculator() {
               <div className="grid sm:grid-cols-2 gap-4 mb-4">
                 <Field>
                   <Label>Total pocket money (USD)</Label>
-                  <input type="number" className="input-dark"
+                  <input type="number" inputMode="decimal" className="input-dark"
                     {...register("pocket_money_usd", { valueAsNumber: true })} />
                 </Field>
               </div>
@@ -517,7 +517,7 @@ export function BudgetCalculator() {
                     </Field>
                     <Field className="flex-1">
                       <Label>INR to convert</Label>
-                      <input type="number" className="input-dark"
+                      <input type="number" inputMode="decimal" className="input-dark"
                         {...register(`cash_conversions.${i}.amount_inr`, { valueAsNumber: true })} />
                     </Field>
                     <button type="button" onClick={() => cashConv.remove(i)} className="mb-0.5 text-red-400/60 hover:text-red-400">

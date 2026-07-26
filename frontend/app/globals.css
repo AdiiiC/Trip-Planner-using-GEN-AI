@@ -348,3 +348,88 @@ select.input-dark option { background: var(--surface); color: var(--fg); }
   }
   .aurora-blob { animation: none !important; }
 }
+
+/* ── Android & Windows touch / responsive fixes ─────────────────────────── */
+
+/* 1. Minimum 44×44 touch targets (WCAG 2.5.5) on touch devices */
+@media (pointer: coarse) {
+  button, a, [role="button"], select, input[type="checkbox"], input[type="radio"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  /* Inline / icon-only buttons (trash, search) can be smaller visually but must
+     have an enlarged tap zone via padding */
+  .btn-icon {
+    padding: 10px;
+  }
+}
+
+/* 2. Prevent double-tap zoom on buttons (Android Chrome) */
+button, a {
+  touch-action: manipulation;
+}
+
+/* 3. Input text-size: 16px minimum stops iOS/Android from auto-zooming on focus */
+input, select, textarea {
+  font-size: max(16px, 0.875rem);
+}
+
+/* 4. Smooth momentum scrolling inside scroll containers (iOS Safari, Android) */
+.overflow-y-auto, .overflow-x-auto, .overflow-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* 5. Prevent horizontal overflow on all viewports */
+html, body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* 6. Ensure glass/surface cards don't break layout on small screens */
+.glass {
+  min-width: 0;
+}
+
+/* 7. Windows high-contrast mode fallback */
+@media (forced-colors: active) {
+  .glass, .surface {
+    border: 1px solid ButtonText;
+    background: ButtonFace;
+    color: ButtonText;
+  }
+  .gradient-text {
+    -webkit-text-fill-color: unset;
+    color: Highlight;
+  }
+  .aurora-bg { display: none; }
+}
+
+/* 8. Range input (used in CashPredictor sliders) — cross-platform styling */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent, #6366f1);
+  cursor: pointer;
+  border: 2px solid #09090b;
+}
+input[type="range"]::-moz-range-thumb {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent, #6366f1);
+  cursor: pointer;
+  border: 2px solid #09090b;
+}
+
+/* 9. Visible focus for Windows keyboard users (already in globals but reinforce) */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid var(--accent, #6366f1);
+  outline-offset: 2px;
+}

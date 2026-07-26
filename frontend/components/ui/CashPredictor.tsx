@@ -212,7 +212,7 @@ export function CashPredictor() {
       <div className="grid grid-cols-3 gap-2 mb-4">
         <div>
           <label className="text-[10px] text-[#8892b0] mb-1 block">Travelers</label>
-          <input type="number" min={1} max={50} value={travelers}
+          <input type="number" inputMode="numeric" min={1} max={50} value={travelers}
             onChange={(e) => setTravelers(+e.target.value)} className="input-dark" />
         </div>
         <div>
@@ -223,7 +223,7 @@ export function CashPredictor() {
         </div>
         <div>
           <label className="text-[10px] text-[#8892b0] mb-1 block">Prepaid $</label>
-          <input type="number" min={0} value={prepaid}
+          <input type="number" inputMode="decimal" min={0} value={prepaid}
             onChange={(e) => setPrepaid(+e.target.value)} className="input-dark" />
         </div>
       </div>

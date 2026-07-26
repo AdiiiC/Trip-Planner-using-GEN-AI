@@ -86,7 +86,7 @@ const marquee = [
   "Live forex · orientexchange",
   "Skyscanner fares",
   "Booking · Agoda · MMT",
-  "Tavily web search",
+  "Live web search (Exa · Serper)",
   "Indian passport visa",
   "iCalendar export",
   "Multi-city routing",
@@ -181,7 +181,8 @@ export function LandingPage() {
                 <p className="text-[11px] text-[var(--fg-dim)] leading-relaxed">
                   Powered by <span className="text-[var(--fg-muted)]">LangGraph</span>,
                   <span className="text-[var(--fg-muted)]"> Groq</span>,
-                  <span className="text-[var(--fg-muted)]"> Tavily</span>. Nothing is
+                  <span className="text-[var(--fg-muted)]"> Exa</span> &amp;
+                  <span className="text-[var(--fg-muted)]"> Serper</span>. Nothing is
                   invented — all prices trace back to a real source.
                 </p>
               </motion.div>
