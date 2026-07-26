@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useForm, useFieldArray } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { PlusCircle, Trash2, Calculator, RefreshCw, ChevronDown, ChevronUp, Info, ShieldCheck } from "lucide-react";
+import { PlusCircle, Trash2, Calculator, RefreshCw, ChevronDown, ChevronUp, Info, ShieldCheck, Search } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { BudgetInput, BudgetResult, VisaCheckResult } from "@/lib/types";
@@ -100,6 +100,8 @@ export function BudgetCalculator() {
   const [visaResults, setVisaResults] = useState<Record<string, VisaCheckResult>>({});
   const [checkingVisa, setCheckingVisa] = useState<string | null>(null);
   const [expandedVisa, setExpandedVisa] = useState<string | null>(null);
+  // attraction price lookup state: key = field index, value = loading bool
+  const [lookingUpAttraction, setLookingUpAttraction] = useState<Record<number, boolean>>({});
 
   const { data: forexRates, isLoading: loadingForex } = useQuery({
     queryKey: ["forex"],
@@ -173,6 +175,29 @@ export function BudgetCalculator() {
       setCheckingVisa(null);
     }
   }, []);
+
+  // Look up entry fee for a sightseeing attraction
+  const handleAttractionLookup = useCallback(async (idx: number) => {
+    const name = (watch(`sightseeing.${idx}.name`) ?? "").trim();
+    if (!name) return;
+    setLookingUpAttraction(prev => ({ ...prev, [idx]: true }));
+    try {
+      const res = await api.attractionPrice(name);
+      if (!res.free && res.amount > 0) {
+        setValue(`sightseeing.${idx}.amount`, res.amount);
+        setValue(`sightseeing.${idx}.currency`, res.currency);
+        // Update name to official full name if returned
+        if (res.name && res.name.trim()) setValue(`sightseeing.${idx}.name`, res.name);
+      } else if (res.free) {
+        setValue(`sightseeing.${idx}.amount`, 0);
+        setValue(`sightseeing.${idx}.currency`, "USD");
+      }
+    } catch {
+      // silently ignore — user can still fill manually
+    } finally {
+      setLookingUpAttraction(prev => ({ ...prev, [idx]: false }));
+    }
+  }, [watch, setValue]);
 
   // Fill live forex rates from orientexchange.in (via /api/forex)
   // forexRates["USD"] = 96.64 already means "1 USD = ₹96.64" — use directly
@@ -381,29 +406,55 @@ export function BudgetCalculator() {
 
             {/* Sightseeing */}
             <SectionCard title="Sightseeing & Attractions">
+              <p className="text-xs text-[#8892b0] flex items-center gap-1 mb-2">
+                <Info className="w-3 h-3" /> Type an attraction name and click
+                <Search className="w-3 h-3 inline mx-0.5" /> to auto-load its entry fee.
+              </p>
               <div className="space-y-2">
-                {sight.fields.map((f, i) => (
-                  <div key={f.id} className="flex gap-2 items-end flex-wrap">
-                    <Field className="flex-1 min-w-[120px]">
-                      <Label>Name</Label>
-                      <input className="input-dark" {...register(`sightseeing.${i}.name`)} />
-                    </Field>
-                    <Field className="w-32">
-                      <Label>Amount</Label>
-                      <input type="number" className="input-dark"
-                        {...register(`sightseeing.${i}.amount`, { valueAsNumber: true })} />
-                    </Field>
-                    <Field className="w-28">
-                      <Label>Currency</Label>
-                      <select className="input-dark" {...register(`sightseeing.${i}.currency`)}>
-                        {allCurrencies.map(c => <option key={c}>{c}</option>)}
-                      </select>
-                    </Field>
-                    <button type="button" onClick={() => sight.remove(i)} className="mb-0.5 text-red-400/60 hover:text-red-400">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+                {sight.fields.map((f, i) => {
+                  const isLoading = !!lookingUpAttraction[i];
+                  const currentName = watch(`sightseeing.${i}.name`) ?? "";
+                  return (
+                    <div key={f.id} className="flex gap-2 items-end flex-wrap">
+                      <Field className="flex-1 min-w-[140px]">
+                        <Label>Attraction</Label>
+                        <div className="flex gap-1">
+                          <input
+                            className="input-dark flex-1"
+                            placeholder="e.g. Marble Mountains"
+                            {...register(`sightseeing.${i}.name`)}
+                            onKeyDown={(e) => e.key === "Enter" && handleAttractionLookup(i)}
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleAttractionLookup(i)}
+                            disabled={isLoading || !currentName.trim()}
+                            title="Look up entry fee"
+                            className="px-2 rounded-lg border border-indigo-500/30 bg-indigo-600/10 hover:bg-indigo-600/20 text-indigo-400 disabled:opacity-40 transition-colors"
+                          >
+                            {isLoading
+                              ? <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              : <Search className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </Field>
+                      <Field className="w-32">
+                        <Label>Amount</Label>
+                        <input type="number" className="input-dark"
+                          {...register(`sightseeing.${i}.amount`, { valueAsNumber: true })} />
+                      </Field>
+                      <Field className="w-28">
+                        <Label>Currency</Label>
+                        <select className="input-dark" {...register(`sightseeing.${i}.currency`)}>
+                          {allCurrencies.map(c => <option key={c}>{c}</option>)}
+                        </select>
+                      </Field>
+                      <button type="button" onClick={() => sight.remove(i)} className="mb-0.5 text-red-400/60 hover:text-red-400">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
               <button type="button" onClick={() => sight.append({ name: "", destination: "", amount: 0, currency: "USD" })}
                 className="mt-2 flex items-center gap-1 text-emerald-400 text-sm hover:text-emerald-300">

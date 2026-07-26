@@ -263,6 +263,16 @@ export const api = {
       summary: string;
     }>("/api/cash-predict", body),
 
+  attractionPrice: (attraction: string, city = "") =>
+    post<{
+      name: string;
+      free: boolean;
+      entry_cost_str: string;
+      amount: number;
+      currency: string;
+      notes: string;
+    }>("/api/attraction-price", { attraction, city }),
+
   exportIcs: async (title: string, startDate: string,
     events: { title: string; day: number; start_time: string; duration_min: number; location?: string; notes?: string }[]
   ): Promise<Blob> => {

@@ -58,6 +58,7 @@ from agents.route import OptimizeRouteInput, optimize_route
 from agents.export import ExportInput, build_ics
 from agents.best_time import BestTimeInput, best_time_to_visit
 from agents.cash_predict import CashPredictInput, predict_cash
+from agents.attraction_price import AttractionPriceInput, get_attraction_price
 
 # ── logging ──────────────────────────────────────────────────────────────────
 
@@ -557,6 +558,16 @@ async def cash_predict_endpoint(request: Request, body: CashPredictInput):
         return await predict_cash(body)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=_safe_error(exc, "cash-predict"))
+
+
+@app.post("/api/attraction-price")
+@limiter.limit("30/minute")
+async def attraction_price_endpoint(request: Request, body: AttractionPriceInput):
+    """Look up the entry fee for a specific attraction."""
+    try:
+        return await get_attraction_price(body)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=_safe_error(exc, "attraction-price"))
 
 
 @app.post("/api/export/ics")
