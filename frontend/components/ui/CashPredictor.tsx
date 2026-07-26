@@ -35,9 +35,9 @@ const COST_BADGE: Record<string, string> = {
 const STYLES = ["budget", "balanced", "comfort", "luxury"];
 
 const PLACEHOLDERS = [
-  "e.g. I'll eat only street food and local diners. Splitting all Grab rides with 3 people. Visiting Marble Mountains and Hoi An. No nightlife, a little souvenir shopping.",
-  "e.g. Mid-range restaurants mostly. Taking the MRT + some Grab. Visiting KLCC, Batu Caves, Petronas. An evening at a rooftop bar. Light shopping at Petaling Street.",
-  "e.g. Local hawker centres and kopitiam only. Walking most places + occasional bus. Visiting Gardens by the Bay, Universal Studios. No nightlife or shopping.",
+  "e.g. I'll eat only street food and local diners. Splitting all Grab rides with 3 people. Visiting Marble Mountains, My Son Sanctuary, and Hoi An Ancient Town. No nightlife, a little souvenir shopping.",
+  "e.g. Mid-range restaurants mostly. Taking the MRT and some Grab. Visiting KLCC Skybridge, Batu Caves, and Petronas Towers observation deck. An evening rooftop bar. Light shopping at Petaling Street.",
+  "e.g. Hawker centres only. Walking and occasional bus. Gardens by the Bay, Sentosa, Universal Studios. No nightlife or shopping.",
 ];
 
 function fmt(n: number) {
@@ -196,7 +196,8 @@ export function CashPredictor() {
               className="input-dark resize-none text-xs leading-relaxed"
             />
             <p className="text-[9px] text-[#8892b0]">
-              Mention: food choices · transport splits · specific attractions · shopping / nightlife plans
+              Mention specific attractions by name → actual entry fees will be looked up automatically.
+              Also describe: food choices · transport splits · shopping / nightlife plans.
             </p>
           </div>
         ))}
