@@ -6,8 +6,9 @@ from __future__ import annotations
 import json
 
 from pydantic import BaseModel, Field
-from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
+
+from agents.llm import get_llm
 
 
 class HotelSearchInput(BaseModel):
@@ -87,8 +88,7 @@ async def search_hotels(inp: HotelSearchInput) -> dict:
     except Exception:
         raw_text = "Use your trained knowledge of typical hotel prices in this city."
 
-    llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-versatile", max_retries=3, timeout=60,
-                    model_kwargs={"response_format": {"type": "json_object"}})
+    llm = get_llm(temperature=0.1, json_mode=True)
     response = llm.invoke(
         _prompt.format_messages(
             city=inp.city,

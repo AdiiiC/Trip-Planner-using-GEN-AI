@@ -6,8 +6,9 @@ from __future__ import annotations
 from typing import AsyncIterator
 
 from pydantic import BaseModel, Field
-from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
+
+from agents.llm import get_llm
 
 
 class InsuranceInput(BaseModel):
@@ -38,8 +39,8 @@ _prompt = ChatPromptTemplate.from_messages([
 ])
 
 
-def _llm() -> ChatGroq:
-    return ChatGroq(temperature=0.3, model_name="llama-3.3-70b-versatile", max_retries=3, timeout=60)
+def _llm():
+    return get_llm(temperature=0.3)
 
 
 async def estimate_insurance(inp: InsuranceInput) -> AsyncIterator[str]:

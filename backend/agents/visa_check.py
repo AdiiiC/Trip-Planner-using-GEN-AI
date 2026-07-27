@@ -15,8 +15,9 @@ from __future__ import annotations
 import json
 
 from pydantic import BaseModel, Field
-from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate
+
+from agents.llm import get_llm
 
 
 class VisaCheckInput(BaseModel):
@@ -91,8 +92,7 @@ async def check_visa(inp: VisaCheckInput) -> dict:
     except Exception:
         search_text = "No search results — use your trained knowledge."
 
-    llm = ChatGroq(temperature=0.1, model_name="llama-3.3-70b-versatile", max_retries=3, timeout=60,
-                    model_kwargs={"response_format": {"type": "json_object"}})
+    llm = get_llm(temperature=0.1, json_mode=True)
     response = llm.invoke(
         _prompt.format_messages(
             country=inp.country,

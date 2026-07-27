@@ -645,16 +645,26 @@ async def city_photo(request: Request, city: str, country: str | None = None):
 
 
 # ── share a trip (public read-only) ──────────────────────────────────────────
+# Uses Redis for persistence (survives Render restarts) with JSON filesystem fallback.
 import pathlib
 from datetime import datetime, timezone
 from pydantic import BaseModel, Field
+
+from agents.cache import search_cache as _share_cache
 
 _SHARES_DIR = pathlib.Path(__file__).parent / "data"
 _SHARES_DIR.mkdir(parents=True, exist_ok=True)
 _SHARES_FILE = _SHARES_DIR / "shares.json"
 
+_SHARE_TTL = 90 * 24 * 60 * 60  # 90 days in seconds
+
 
 def _load_shares() -> dict:
+    """Load from Redis first, fall back to local file."""
+    # Try Redis
+    if hasattr(_share_cache, '_available') and _share_cache._available:
+        return {}  # Redis mode — each share is stored individually by key
+    # Fallback — file mode
     if not _SHARES_FILE.exists():
         return {}
     try:
@@ -663,11 +673,41 @@ def _load_shares() -> dict:
         return {}
 
 
-def _save_shares(data: dict) -> None:
+def _save_share(share_id: str, data: dict) -> None:
+    """Persist a share to Redis (preferred) or file fallback."""
+    cache_key = f"share::{share_id}"
+    # Try Redis with long TTL
+    if hasattr(_share_cache, '_client') and hasattr(_share_cache, '_available') and _share_cache._available:
+        try:
+            _share_cache._client.setex(cache_key, _SHARE_TTL, json.dumps(data))
+            return
+        except Exception:
+            pass
+    # Fallback — append to file
     try:
-        _SHARES_FILE.write_text(json.dumps(data))
-    except Exception as exc:  # noqa
-        logger.warning("Failed to persist shares: %s", exc)
+        shares = {}
+        if _SHARES_FILE.exists():
+            shares = json.loads(_SHARES_FILE.read_text())
+        shares[share_id] = data
+        _SHARES_FILE.write_text(json.dumps(shares))
+    except Exception as exc:
+        logger.warning("Failed to persist share: %s", exc)
+
+
+def _get_share(share_id: str) -> dict | None:
+    """Retrieve a share from Redis first, then file fallback."""
+    cache_key = f"share::{share_id}"
+    # Try Redis
+    if hasattr(_share_cache, '_client') and hasattr(_share_cache, '_available') and _share_cache._available:
+        try:
+            raw = _share_cache._client.get(cache_key)
+            if raw:
+                return json.loads(raw)
+        except Exception:
+            pass
+    # Fallback — file
+    shares = _load_shares()
+    return shares.get(share_id)
 
 
 class ShareInput(BaseModel):
@@ -682,13 +722,9 @@ class ShareInput(BaseModel):
 @limiter.limit("10/minute")
 async def create_share(request: Request, body: ShareInput):
     """Create a public, read-only shared trip. Returns a short id + url path."""
-    shares = _load_shares()
-    # Short 10-char id — collision-resistant enough for a shareable link.
     share_id = uuid.uuid4().hex[:10]
-    while share_id in shares:
-        share_id = uuid.uuid4().hex[:10]
 
-    shares[share_id] = {
+    share_data = {
         "id":       share_id,
         "title":    body.title.strip() or "Untitled Trip",
         "city":     body.city.strip(),
@@ -697,18 +733,16 @@ async def create_share(request: Request, body: ShareInput):
         "markdown": body.markdown,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
-    _save_shares(shares)
+    _save_share(share_id, share_data)
     return {"id": share_id, "path": f"/share/{share_id}"}
 
 
 @app.get("/api/share/{share_id}")
 @limiter.limit("120/minute")
 async def get_share(request: Request, share_id: str):
-    # Fast-fail probes: our IDs are always 10 lowercase hex chars
     if not re.fullmatch(r"[0-9a-f]{10}", share_id):
         raise HTTPException(status_code=404, detail="Shared trip not found")
-    shares = _load_shares()
-    entry = shares.get(share_id)
+    entry = _get_share(share_id)
     if not entry:
         raise HTTPException(status_code=404, detail="Shared trip not found")
     return entry
