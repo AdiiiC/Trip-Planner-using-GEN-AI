@@ -20,6 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { QuickPlanWizard } from "@/components/QuickPlanWizard";
 import {
   Tooltip,
   TooltipContent,
@@ -151,13 +152,20 @@ export function LandingPage() {
               </div>
             </div>
 
-            {/* Right stat / provenance card */}
+            {/* Right: quick plan wizard */}
             <div className="md:col-span-4">
               <motion.div
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.2, duration: 0.6 }}
-                className="surface p-5 md:p-6 hover-lift"
+              >
+                <QuickPlanWizard />
+              </motion.div>
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: 0.4, duration: 0.6 }}
+                className="surface p-5 md:p-6 hover-lift mt-4"
               >
                 <div className="flex items-center justify-between mb-4">
                   <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-[var(--fg-muted)]">

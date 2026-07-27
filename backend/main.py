@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import uuid
 from typing import AsyncIterator
@@ -21,15 +20,14 @@ import sentry_sdk
 
 load_dotenv()
 
+from config import settings
+
 # ── Sentry error monitoring ───────────────────────────────────────────────────
-# Set SENTRY_DSN_BACKEND in Render environment variables.
-# send_default_pii=False — we don't collect user IPs or personal data.
-_sentry_dsn = os.getenv("SENTRY_DSN_BACKEND", "")
-if _sentry_dsn:
+if settings.sentry_dsn:
     sentry_sdk.init(
-        dsn=_sentry_dsn,
-        send_default_pii=False,   # no IPs, no personal data collected
-        traces_sample_rate=0.0,   # error-only, no performance tracing quota used
+        dsn=settings.sentry_dsn,
+        send_default_pii=False,
+        traces_sample_rate=0.0,
     )
 
 from agents.budget import BudgetInput, calculate_budget
@@ -79,7 +77,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 @app.middleware("http")
 async def _limit_body_size(request: Request, call_next):
     """BUG-003: handles both Content-Length and chunked transfer encoding."""
-    max_bytes = 1 * 1024 * 1024  # 1 MB
+    max_bytes = settings.max_body_bytes
 
     # Fast path — Content-Length header present
     cl = request.headers.get("content-length")
@@ -108,7 +106,7 @@ async def _limit_body_size(request: Request, call_next):
 # Get your key at https://dashboard.hcaptcha.com — free tier available.
 # When key is not set, captcha is skipped (graceful degradation).
 
-_HCAPTCHA_SECRET = os.getenv("HCAPTCHA_SECRET_KEY", "")
+_HCAPTCHA_SECRET = settings.hcaptcha_secret
 _HCAPTCHA_VERIFY_URL = "https://api.hcaptcha.com/siteverify"
 _CAPTCHA_PATHS = {"/api/plan", "/api/multi-city", "/api/refine"}
 
@@ -179,7 +177,7 @@ app.add_middleware(
 )
 
 # ── debug mode (never enable in production) ───────────────────────────────────
-DEBUG = os.getenv("DEBUG", "false").lower() == "true"
+DEBUG = settings.debug
 
 def _safe_error(exc: Exception, context: str = "") -> str:
     """Return a safe error message — never leaks internals in production."""
@@ -208,10 +206,10 @@ async def health():
     """Returns service health + which integrations are configured.
     Used by Render health checks and UptimeRobot monitoring."""
     services = {
-        "groq":     bool(os.getenv("GROQ_API_KEY")),
-        "serper":   bool(os.getenv("SERPER_API_KEY")),
-        "exa":      bool(os.getenv("EXA_API_KEY")),
-        "rapidapi": bool(os.getenv("RAPIDAPI_KEY")),  # optional — falls back to Photon
+        "groq":     bool(settings.groq_api_key),
+        "serper":   bool(settings.serper_api_key),
+        "exa":      bool(settings.exa_api_key),
+        "rapidapi": bool(settings.rapidapi_key),
     }
     return {
         "status":   "ok" if all(services.values()) else "degraded",
@@ -427,7 +425,7 @@ async def cities_endpoint(request: Request, q: str = "", k: int = 7):
     if cached := search_cache.get(cache_key):
         return cached
 
-    rapidapi_key = os.getenv("RAPIDAPI_KEY", "")
+    rapidapi_key = settings.rapidapi_key
 
     # ── GeoDB (if key is configured) ─────────────────────────────────────────
     if rapidapi_key:

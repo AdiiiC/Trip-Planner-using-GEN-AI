@@ -476,6 +476,21 @@ export function TripPlanner() {
   const days     = watch("days");
   const travelDate = watch("travel_date");
 
+  // Hydrate from URL query params (landing page wizard deep-link)
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const qCity = params.get("city");
+    const qDays = params.get("days");
+    const qStyle = params.get("travel_style");
+    const qBudget = params.get("budget");
+    if (qCity) setValue("city", qCity);
+    if (qDays) setValue("days", parseInt(qDays, 10) || 3);
+    if (qStyle) setValue("travel_style", qStyle as "relaxed" | "balanced" | "adventurous" | "family-friendly");
+    if (qBudget) setValue("budget", qBudget as "low" | "medium" | "luxury");
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Hero image for the searched city
   const heroUrl = useWikiHero(output && city ? city : "");
 

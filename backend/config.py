@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     sentry_dsn: str = Field(default="", alias="SENTRY_DSN_BACKEND")
     hcaptcha_secret: str = Field(default="", alias="HCAPTCHA_SECRET_KEY")
     allowed_origins: str = Field(default="", alias="ALLOWED_ORIGINS")
+    rapidapi_key: str = Field(default="", alias="RAPIDAPI_KEY")
+    debug: bool = Field(default=False, alias="DEBUG")
 
     # ── Tunables ──────────────────────────────────────────────────────────────
     llm_cache_ttl: int = Field(default=900, alias="LLM_CACHE_TTL")          # 15 min
