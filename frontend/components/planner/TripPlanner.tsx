@@ -25,7 +25,9 @@ import { DatePicker } from "@/components/ui/DatePicker";
 import { BackToTop } from "@/components/ui/BackToTop";
 import { toast } from "sonner";
 import { QRCodeButton } from "@/components/ui/QRCodeButton";
+import { CalendarExportButton } from "@/components/ui/CalendarExport";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import HCaptcha from "@hcaptcha/react-hcaptcha";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
@@ -229,6 +231,53 @@ function MultiCityHeroes({ control }: { control: Control<MultiForm> }) {
 }
 
 
+
+// ─── multi-city route map ─────────────────────────────────────────────────────
+
+const RouteMapDynamic = dynamic(() => import("@/components/ui/RouteMap").then(m => m.RouteMap), {
+  ssr: false,
+  loading: () => <div className="h-[260px] rounded-xl bg-[var(--surface)] animate-pulse" />,
+});
+
+function MultiCityRouteMap({ control }: { control: Control<MultiForm> }) {
+  const stops = useWatch({ control, name: "stops" });
+  const valid = (stops ?? []).filter((s) => s?.city?.trim());
+  const [geoStops, setGeoStops] = useState<Array<{ city: string; lat: number; lng: number }>>([]);
+
+  // Geocode cities via Photon (free, no key)
+  useEffect(() => {
+    if (valid.length < 2) { setGeoStops([]); return; }
+    let cancelled = false;
+    (async () => {
+      const results: Array<{ city: string; lat: number; lng: number }> = [];
+      for (const s of valid) {
+        try {
+          const resp = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(s.city)}&limit=1&lang=en`);
+          const data = await resp.json();
+          const feat = data?.features?.[0];
+          if (feat) {
+            const [lng, lat] = feat.geometry.coordinates;
+            results.push({ city: s.city, lat, lng });
+          }
+        } catch { /* skip failed geocodes */ }
+      }
+      if (!cancelled) setGeoStops(results);
+    })();
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valid.map(s => s.city).join("|")]);
+
+  if (geoStops.length < 2) return null;
+
+  return (
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-5">
+      <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--fg-muted)] mb-2">
+        ⁘ Route map · {geoStops.length} stops
+      </p>
+      <RouteMapDynamic stops={geoStops} />
+    </motion.div>
+  );
+}
 
 // ─── recently searched hook ───────────────────────────────────────────────────
 
@@ -947,6 +996,7 @@ export function TripPlanner() {
               <div className="ml-auto flex gap-1 no-print overflow-x-auto">
                 <ActionBtn icon={copied ? Check : Copy} label={copied ? "Copied" : "Copy"} active={copied} onClick={handleCopy} />
                 <ActionBtn icon={Download} label="Download" onClick={handleDownload} />
+                <CalendarExportButton city={city} days={days} travelDate={travelDate} itinerary={output} />
                 <ActionBtn icon={Printer} label="Print" onClick={handlePrint} />
                 <ActionBtn icon={BookOpen} label="Save" onClick={handleSave} />
                 <ActionBtn icon={shared ? Check : Share2} label={shared ? "Copied!" : "Share"} active={shared} onClick={handleShare} />
@@ -1008,9 +1058,12 @@ export function TripPlanner() {
                         <CityHero city={city} />
                       </motion.div>
                     )}
-                    {/* Multi-city photo essay */}
+                    {/* Multi-city photo essay + route map */}
                     {mode === "multi" && !streaming && (
-                      <MultiCityHeroes control={multiForm.control} />
+                      <>
+                        <MultiCityHeroes control={multiForm.control} />
+                        <MultiCityRouteMap control={multiForm.control} />
+                      </>
                     )}
                     <div className="prose-trip text-sm">
                       {streaming
