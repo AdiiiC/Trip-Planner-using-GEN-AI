@@ -21,6 +21,7 @@ function normalizeRoute(raw: string): string {
   return v;
 }
 import { VisaBadge, VisaResultCard } from "@/components/visa/VisaCostChecker";
+import { PocketMoneyCheck } from "@/components/budget/PocketMoneyCheck";
 import {
   PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
   BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList,
@@ -669,6 +670,12 @@ export function BudgetCalculator() {
               {result && (
                 <BudgetResults
                   key={activeCase}
+                  result={activeCase === "b" && resultB ? resultB : result}
+                />
+              )}
+              {result && (
+                <PocketMoneyCheck
+                  key={`pmc-${activeCase}`}
                   result={activeCase === "b" && resultB ? resultB : result}
                 />
               )}

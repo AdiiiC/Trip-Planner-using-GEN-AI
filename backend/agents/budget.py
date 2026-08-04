@@ -110,6 +110,7 @@ def calculate_budget(inp: BudgetInput) -> dict:
         inr = to_inr(e.amount, e.currency)
         extra_items.append({
             "name": e.name,
+            "destination": e.destination,
             "original": f"{e.amount:,.0f} {e.currency}",
             "amount_inr": round(inr, 2),
         })

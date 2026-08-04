@@ -88,6 +88,7 @@ export interface SightItem {
 
 export interface ExtraItem {
   name: string;
+  destination: string;
   original: string;
   amount_inr: number;
 }

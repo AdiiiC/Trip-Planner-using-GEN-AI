@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { BudgetCalculator } from "@/components/budget/BudgetCalculator";
 import { CurrencyConverter } from "@/components/ui/CurrencyConverter";
-import { CashPredictor } from "@/components/ui/CashPredictor";
 
 export const metadata: Metadata = {
   title: "Trip Budget Calculator",
@@ -14,7 +13,6 @@ export default function BudgetPage() {
     <>
       <BudgetCalculator />
       <div className="max-w-7xl mx-auto px-4 pb-12 space-y-6">
-        <CashPredictor />
         <CurrencyConverter />
       </div>
     </>
