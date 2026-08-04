@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { Wallet, CheckCircle2, TriangleAlert, Info, Banknote, Wand2, ArrowRight } from "lucide-react";
 import type { BudgetResult } from "@/lib/types";
-import { formatINR, formatUSD, cn } from "@/lib/utils";
+import { formatINR, formatUSD, formatNumber, cn } from "@/lib/utils";
 
 // Extras whose name looks like something you pay for in India before flying out
 const PREPAID_HINT = /visa|insurance|forex|card|booking|deposit|ticket/i;
@@ -28,6 +28,59 @@ interface CountryRow {
   dailyInr: number;
   priority: Priority;
   actualInr: number | null;
+}
+
+// Notes a forex desk actually hands over, largest first
+const DENOMS: Record<string, number[]> = {
+  USD: [100, 50, 20],
+  EUR: [100, 50, 20],
+  GBP: [50, 20, 10],
+  AED: [100, 50, 20],
+  SGD: [100, 50, 10],
+  MYR: [100, 50, 20, 10],
+  THB: [1000, 500, 100],
+  VND: [500_000, 200_000, 100_000, 50_000],
+  IDR: [100_000, 50_000, 20_000],
+  JPY: [10_000, 5_000, 1_000],
+};
+const FALLBACK_DENOMS = [100, 50, 20, 10];
+
+// Granularity worth rounding a purchase to — not always the largest note
+const ROUND_STEP: Record<string, number> = {
+  USD: 50,
+  EUR: 50,
+  GBP: 50,
+  AED: 50,
+  SGD: 50,
+  MYR: 50,
+  THB: 500,
+  VND: 500_000,
+  IDR: 50_000,
+  JPY: 1_000,
+};
+const FALLBACK_STEP = 50;
+
+function roundToNotes(amount: number, currency: string): number {
+  const step = ROUND_STEP[currency] ?? FALLBACK_STEP;
+  if (amount <= 0) return 0;
+  return Math.max(step, Math.round(amount / step) * step);
+}
+
+/** "3 × 500,000 + 1 × 100,000" — greedy largest-note-first split. */
+function noteBreakdown(amount: number, currency: string): string {
+  const denoms = DENOMS[currency] ?? FALLBACK_DENOMS;
+  const parts: string[] = [];
+  let left = amount;
+  for (const d of denoms) {
+    const n = Math.floor(left / d);
+    if (n > 0) {
+      parts.push(`${n} × ${formatNumber(d)}`);
+      left -= n * d;
+    }
+    if (left <= 0) break;
+  }
+  if (left > 0) parts.push(`+ ${formatNumber(left)}`);
+  return parts.join(" + ");
 }
 
 interface CountryPlan extends CountryRow {
@@ -157,6 +210,27 @@ export function PocketMoneyCheck({ result }: { result: BudgetResult }) {
   const { rows: ledger, finalCarry } = buildLedger(perCountry, recoveryPct);
   const tracked = ledger.some((c) => c.carryOut != null);
   const comingHome = finalCarry + reserve;
+
+  // Round every currency purchase to notes the forex desk can actually hand over,
+  // then let the USD balance absorb the difference
+  const forex = useMemo(() => {
+    const legs = cc.allocations.map((a) => {
+      const rate = result.rates_used?.[a.currency] ?? 0;
+      const clean = roundToNotes(a.foreign_amount, a.currency);
+      return {
+        currency: a.currency,
+        raw: a.foreign_amount,
+        clean,
+        inr: clean * rate,
+        notes: noteBreakdown(clean, a.currency),
+      };
+    });
+    const localInr = legs.reduce((s, l) => s + l.inr, 0);
+    const usdClean = usdRate > 0 ? roundToNotes((pocket - localInr) / usdRate, "USD") : 0;
+    const usdInr = usdClean * usdRate;
+    const total = localInr + usdInr;
+    return { legs, usdClean, usdInr, total, delta: total - pocket, totalUsd: usdRate > 0 ? total / usdRate : 0 };
+  }, [cc.allocations, result.rates_used, usdRate, pocket]);
 
   return (
     <motion.div
@@ -406,31 +480,56 @@ export function PocketMoneyCheck({ result }: { result: BudgetResult }) {
         </div>
       )}
 
-      {/* Arrival buffer */}
-      <div className="rounded-xl border border-[var(--border)] p-3 space-y-1.5">
+      {/* Forex to buy */}
+      <div className="rounded-xl border border-[var(--border)] p-3 space-y-2">
         <div className="flex items-center gap-1.5">
           <Banknote className="w-3.5 h-3.5 text-amber-400" />
-          <p className="text-xs font-medium text-white">Arrival buffer — cash exchanged before you fly</p>
+          <p className="text-xs font-medium text-white">Forex to buy — rounded to notes you can actually get</p>
         </div>
-        {cc.allocations.length === 0 && (
-          <p className="text-[11px] text-[var(--fg-muted)]">
-            Nothing pre-exchanged. Carry enough for a SIM, an airport taxi and one meal per country.
-          </p>
-        )}
-        {cc.allocations.map((a, i) => (
-          <div key={i} className="flex justify-between text-[11px]">
-            <span className="text-[var(--fg-muted)]">{a.currency}</span>
-            <span className="text-white">
-              {a.display} <span className="text-[var(--fg-muted)]">({formatINR(a.inr_spent)})</span>
-            </span>
+
+        {forex.legs.map((l) => (
+          <div key={l.currency} className="flex items-baseline justify-between gap-2 text-[11px]">
+            <div className="min-w-0">
+              <span className="text-white font-medium">
+                {formatNumber(l.clean)} {l.currency}
+              </span>
+              <span className="text-[var(--fg-muted)] ml-2">{l.notes}</span>
+              {Math.round(l.raw) !== l.clean && (
+                <span className="text-[var(--fg-muted)]/60 ml-2">from {formatNumber(l.raw)}</span>
+              )}
+            </div>
+            <span className="text-white shrink-0">{formatINR(l.inr)}</span>
           </div>
         ))}
+
+        <div className="flex items-baseline justify-between gap-2 text-[11px]">
+          <div className="min-w-0">
+            <span className="text-white font-medium">{formatNumber(forex.usdClean)} USD</span>
+            <span className="text-[var(--fg-muted)] ml-2">{noteBreakdown(forex.usdClean, "USD")}</span>
+            <span className="text-[var(--fg-muted)]/60 ml-2">balance, carried as cash</span>
+          </div>
+          <span className="text-white shrink-0">{formatINR(forex.usdInr)}</span>
+        </div>
+
         <div className="flex justify-between text-[11px] border-t border-[var(--border)] pt-1.5">
-          <span className="text-[var(--fg-muted)]">Carried as USD cash / forex card</span>
+          <span className="text-[var(--fg-muted)]">
+            Set pocket money to <span className="text-white font-medium">{formatUSD(forex.totalUsd)}</span>
+          </span>
           <span className="text-white font-medium">
-            {formatUSD(cc.usd_forex_remaining_usd)} ({formatINR(cc.usd_forex_remaining_inr)})
+            {formatINR(forex.total)}
+            {Math.abs(forex.delta) >= 1 && (
+              <span className={cn("ml-2 font-normal", forex.delta > 0 ? "text-amber-300" : "text-[var(--fg-muted)]")}>
+                {forex.delta > 0 ? "+" : "−"}
+                {formatINR(Math.abs(forex.delta))}
+              </span>
+            )}
           </span>
         </div>
+
+        <p className="text-[10px] text-[var(--fg-muted)]">
+          Local currency is only an arrival buffer — SIM, airport transfer, first meal. Everything else rides as USD,
+          which carries between legs at no loss and converts better in-country than at an Indian forex desk.
+        </p>
       </div>
 
       <p className="flex items-start gap-1.5 text-[10px] text-[var(--fg-muted)]">
