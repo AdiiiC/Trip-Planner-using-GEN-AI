@@ -2,10 +2,10 @@
 
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useForm, useFieldArray } from "react-hook-form";
+import { useForm, useFieldArray, type Control, type UseFormRegister, type UseFormWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { PlusCircle, Trash2, Calculator, RefreshCw, ChevronDown, ChevronUp, Info, ShieldCheck, Search, ExternalLink } from "lucide-react";
+import { PlusCircle, Trash2, Calculator, RefreshCw, ChevronDown, ChevronUp, Info, ShieldCheck, Search, ExternalLink, Calendar, Copy, GitCompareArrows, TrendingDown } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { BudgetInput, BudgetResult, VisaCheckResult } from "@/lib/types";
@@ -29,10 +29,21 @@ import { useEffect, useRef, useState as useCountState } from "react";
 
 // ─── schema ───────────────────────────────────────────────────────────────────
 
+const flightSchema = z.object({
+  route: z.string(),
+  price_inr: z.number().min(0),
+  per_person: z.boolean(),
+  date: z.string().optional(),
+});
+
 const schema = z.object({
   travelers: z.number().min(1).max(50),
   exchange_rates: z.array(z.object({ currency: z.string().min(1), rate_to_inr: z.number().positive() })),
-  flights: z.array(z.object({ route: z.string().min(1), price_inr: z.number().min(0), per_person: z.boolean() })),
+  flights: z.array(flightSchema),
+  case_a_label: z.string(),
+  compare_enabled: z.boolean(),
+  flights_b: z.array(flightSchema),
+  case_b_label: z.string(),
   accommodations: z.array(z.object({
     destination: z.string().min(1),
     total_cost_inr: z.number().min(0),
@@ -45,11 +56,48 @@ const schema = z.object({
 });
 
 type FormValues = z.infer<typeof schema>;
+type FlightLeg = z.infer<typeof flightSchema>;
+type CaseKey = "a" | "b";
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 const COMMON_CURRENCIES = ["USD", "EUR", "GBP", "JPY", "THB", "VND", "MYR", "SGD", "IDR", "AED", "AUD", "INR"];
 const PIE_COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+
+const sumLegs = (legs: FlightLeg[] = []) =>
+  legs.reduce((s, f) => s + (Number.isFinite(f.price_inr) ? f.price_inr : 0), 0);
+
+/** "12 Sep" or "12 Sep – 19 Sep" from the legs that actually have a date. */
+function dateRangeLabel(legs: FlightLeg[] = []): string {
+  const dates = legs.map(f => f.date).filter((d): d is string => !!d).sort();
+  if (!dates.length) return "No dates set";
+  const fmt = (iso: string) =>
+    new Date(`${iso}T00:00:00`).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return dates[0] === dates[dates.length - 1]
+    ? fmt(dates[0])
+    : `${fmt(dates[0])} – ${fmt(dates[dates.length - 1])}`;
+}
+
+/** Strip comparison-only fields and drop blank rows before hitting the API. */
+function toBudgetInput(d: FormValues, legs: FlightLeg[]): BudgetInput {
+  return {
+    travelers: d.travelers,
+    exchange_rates: d.exchange_rates,
+    flights: legs
+      .filter(f => f.route.trim() !== "" || f.price_inr > 0)
+      .map(f => ({
+        route: f.route.trim() || "Flight",
+        price_inr: f.price_inr,
+        per_person: f.per_person,
+        date: f.date || "",
+      })),
+    accommodations: d.accommodations,
+    sightseeing: d.sightseeing,
+    extras: d.extras,
+    pocket_money_usd: d.pocket_money_usd,
+    cash_conversions: d.cash_conversions,
+  };
+}
 
 function SectionCard({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
   const [open, setOpen] = useState(() => {
@@ -96,6 +144,8 @@ function Field({ children, className }: { children: React.ReactNode; className?:
 
 export function BudgetCalculator() {
   const [result, setResult] = useState<BudgetResult | null>(null);
+  const [resultB, setResultB] = useState<BudgetResult | null>(null);
+  const [activeCase, setActiveCase] = useState<CaseKey>("a");
   // visa results keyed by destination name
   const [visaResults, setVisaResults] = useState<Record<string, VisaCheckResult>>({});
   const [checkingVisa, setCheckingVisa] = useState<string | null>(null);
@@ -119,10 +169,14 @@ export function BudgetCalculator() {
         { currency: "VND", rate_to_inr: 0.00386 },
       ],
       flights: [
-        { route: "BLR → SGN", price_inr: 17083, per_person: true },
-        { route: "SGN → KUL", price_inr: 8295,  per_person: true },
-        { route: "KUL → BLR", price_inr: 15984, per_person: true },
+        { route: "BLR → SGN", price_inr: 17083, per_person: true, date: "" },
+        { route: "SGN → KUL", price_inr: 8295,  per_person: true, date: "" },
+        { route: "KUL → BLR", price_inr: 15984, per_person: true, date: "" },
       ],
+      case_a_label: "Week 1",
+      compare_enabled: false,
+      flights_b: [],
+      case_b_label: "Week 2",
       accommodations: [
         { destination: "Da Nang",      total_cost_inr: 7241,  split_type: "group" },
         { destination: "HCMC",         total_cost_inr: 12194, split_type: "group" },
@@ -145,18 +199,43 @@ export function BudgetCalculator() {
   });
 
   const exRates    = useFieldArray({ control, name: "exchange_rates" });
-  const flights    = useFieldArray({ control, name: "flights" });
   const stays      = useFieldArray({ control, name: "accommodations" });
   const sight      = useFieldArray({ control, name: "sightseeing" });
   const xtra       = useFieldArray({ control, name: "extras" });
   const cashConv   = useFieldArray({ control, name: "cash_conversions" });
 
   const mutation = useMutation({
-    mutationFn: (data: BudgetInput) => api.calculateBudget(data),
-    onSuccess: (data) => setResult(data),
+    mutationFn: async (data: FormValues) => {
+      const a = await api.calculateBudget(toBudgetInput(data, data.flights));
+      const b = data.compare_enabled
+        ? await api.calculateBudget(toBudgetInput(data, data.flights_b))
+        : null;
+      return { a, b };
+    },
+    onSuccess: ({ a, b }) => {
+      setResult(a);
+      setResultB(b);
+      setActiveCase("a");
+    },
   });
 
-  const onSubmit = (data: FormValues) => mutation.mutate(data as BudgetInput);
+  const onSubmit = (data: FormValues) => mutation.mutate(data);
+
+  const compareEnabled = watch("compare_enabled");
+
+  // Seed Case 2 with Case 1's routes so only prices/dates need re-entering
+  const toggleCompare = useCallback(() => {
+    const next = !watch("compare_enabled");
+    setValue("compare_enabled", next);
+    if (next && watch("flights_b").length === 0) {
+      setValue("flights_b", watch("flights").map(f => ({ ...f, date: "" })));
+    }
+    if (!next) setResultB(null);
+  }, [watch, setValue]);
+
+  const copyRoutesFromA = useCallback(() => {
+    setValue("flights_b", watch("flights").map(f => ({ ...f, date: "" })));
+  }, [watch, setValue]);
 
   // Add visa cost to extras list
   const addVisaToBudget = useCallback((name: string, amount: number, currency: string) => {
@@ -287,37 +366,60 @@ export function BudgetCalculator() {
 
             {/* Flights */}
             <SectionCard title="Flights (per person in INR)">
-              <div className="space-y-2">
-                {flights.fields.map((f, i) => (
-                  <div key={f.id} className="flex gap-2 items-end">
-                    <Field className="flex-1">
-                      <Label>Route</Label>
-                      <input
-                        className="input-dark"
-                        placeholder="BLR → SGN"
-                        {...register(`flights.${i}.route`)}
-                        onChange={(e) => {
-                          const normalized = normalizeRoute(e.target.value);
-                          e.target.value = normalized;
-                          register(`flights.${i}.route`).onChange(e);
-                        }}
-                      />
-                    </Field>
-                    <Field className="w-36">
-                      <Label>Price (₹)</Label>
-                      <input type="number" inputMode="decimal" className="input-dark"
-                        {...register(`flights.${i}.price_inr`, { valueAsNumber: true })} />
-                    </Field>
-                    <button type="button" onClick={() => flights.remove(i)} className="mb-0.5 text-red-400/60 hover:text-red-400">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+              <FlightCaseBlock
+                control={control}
+                register={register}
+                watch={watch}
+                name="flights"
+                labelField="case_a_label"
+                accent="emerald"
+                badge="Case 1"
+              />
+
+              <div className="pt-3 mt-3 border-t border-[var(--border)]">
+                <button
+                  type="button"
+                  onClick={toggleCompare}
+                  className={cn(
+                    "flex items-center gap-2 text-sm rounded-lg px-3 py-1.5 border transition-colors",
+                    compareEnabled
+                      ? "border-indigo-500/40 bg-indigo-600/15 text-indigo-300 hover:bg-indigo-600/25"
+                      : "border-[var(--border)] text-[var(--fg-muted)] hover:text-white hover:border-white/20"
+                  )}
+                >
+                  <GitCompareArrows className="w-4 h-4" />
+                  {compareEnabled ? "Remove second week" : "Compare another week"}
+                </button>
+                {!compareEnabled && (
+                  <p className="text-[10px] text-[var(--fg-muted)]/60 mt-2">
+                    Add a second set of flight prices for different dates and see both totals side by side.
+                  </p>
+                )}
               </div>
-              <button type="button" onClick={() => flights.append({ route: "", price_inr: 0, per_person: true })}
-                className="mt-2 flex items-center gap-1 text-emerald-400 text-sm hover:text-emerald-300">
-                <PlusCircle className="w-4 h-4" /> Add flight
-              </button>
+
+              <AnimatePresence initial={false}>
+                {compareEnabled && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden"
+                  >
+                    <div className="pt-3">
+                      <FlightCaseBlock
+                        control={control}
+                        register={register}
+                        watch={watch}
+                        name="flights_b"
+                        labelField="case_b_label"
+                        accent="indigo"
+                        badge="Case 2"
+                        onCopyRoutes={copyRoutesFromA}
+                      />
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </SectionCard>
 
             {/* Accommodation */}
@@ -551,8 +653,25 @@ export function BudgetCalculator() {
 
           {/* ── Right column: results ── */}
           <div className="space-y-4">
+            {result && resultB && (
+              <CaseComparison
+                a={result}
+                b={resultB}
+                labelA={watch("case_a_label") || "Case 1"}
+                labelB={watch("case_b_label") || "Case 2"}
+                datesA={dateRangeLabel(watch("flights"))}
+                datesB={dateRangeLabel(watch("flights_b"))}
+                activeCase={activeCase}
+                onSelect={setActiveCase}
+              />
+            )}
             <AnimatePresence>
-              {result && <BudgetResults result={result} />}
+              {result && (
+                <BudgetResults
+                  key={activeCase}
+                  result={activeCase === "b" && resultB ? resultB : result}
+                />
+              )}
               {!result && (
                 <div className="glass rounded-2xl p-8 flex flex-col items-center justify-center text-center min-h-[300px] gap-4">
                   <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -683,7 +802,7 @@ function BudgetResults({ result }: { result: BudgetResult }) {
         <p className="text-sm font-medium text-white">1. Fixed Costs</p>
         <ResultSection label="Flights" total={fc.flights.total_inr}>
           {fc.flights.items.map((f, i) => (
-            <Row key={i} label={f.route} value={formatINR(f.amount_inr)} />
+            <Row key={i} label={f.date ? `${f.route} · ${f.date}` : f.route} value={formatINR(f.amount_inr)} />
           ))}
         </ResultSection>
         <ResultSection label="Stays" total={fc.stays.total_inr}>
@@ -744,3 +863,171 @@ function Row({ label, value, sub }: { label: string; value: string; sub?: boolea
     </div>
   );
 }
+
+// ─── Flight case block (one week of flight prices + dates) ────────────────────
+
+function FlightCaseBlock({
+  control, register, watch, name, labelField, accent, badge, onCopyRoutes,
+}: {
+  control: Control<FormValues>;
+  register: UseFormRegister<FormValues>;
+  watch: UseFormWatch<FormValues>;
+  name: "flights" | "flights_b";
+  labelField: "case_a_label" | "case_b_label";
+  accent: "emerald" | "indigo";
+  badge: string;
+  onCopyRoutes?: () => void;
+}) {
+  const fa = useFieldArray({ control, name });
+  const legs = watch(name) ?? [];
+  const subtotal = sumLegs(legs);
+  const accentCls = accent === "emerald"
+    ? "border-emerald-500/30 bg-emerald-600/10 text-emerald-300"
+    : "border-indigo-500/30 bg-indigo-600/10 text-indigo-300";
+  const linkCls = accent === "emerald"
+    ? "text-emerald-400 hover:text-emerald-300"
+    : "text-indigo-400 hover:text-indigo-300";
+
+  return (
+    <div className="rounded-xl border border-[var(--border)] p-3 space-y-2">
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className={cn("text-[10px] font-semibold uppercase tracking-wider rounded-md border px-2 py-0.5", accentCls)}>
+          {badge}
+        </span>
+        <input
+          className="input-dark h-8 w-32 text-xs"
+          placeholder="Week 1"
+          {...register(labelField)}
+        />
+        <span className="text-xs text-[var(--fg-muted)] flex items-center gap-1">
+          <Calendar className="w-3 h-3" /> {dateRangeLabel(legs)}
+        </span>
+        <span className="ml-auto text-xs text-white font-semibold">{formatINR(subtotal)}</span>
+      </div>
+
+      <div className="space-y-2">
+        {fa.fields.map((f, i) => (
+          <div key={f.id} className="flex gap-2 items-end flex-wrap">
+            <Field className="flex-1 min-w-[130px]">
+              <Label>Route</Label>
+              <input
+                className="input-dark"
+                placeholder="BLR → SGN"
+                {...register(`${name}.${i}.route` as const)}
+                onChange={(e) => {
+                  e.target.value = normalizeRoute(e.target.value);
+                  register(`${name}.${i}.route` as const).onChange(e);
+                }}
+              />
+            </Field>
+            <Field className="w-40">
+              <Label>Travel date</Label>
+              <input type="date" className="input-dark" {...register(`${name}.${i}.date` as const)} />
+            </Field>
+            <Field className="w-32">
+              <Label>Price (₹)</Label>
+              <input type="number" inputMode="decimal" className="input-dark"
+                {...register(`${name}.${i}.price_inr` as const, { valueAsNumber: true })} />
+            </Field>
+            <button type="button" onClick={() => fa.remove(i)} className="mb-0.5 text-red-400/60 hover:text-red-400">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        ))}
+        {fa.fields.length === 0 && (
+          <p className="text-xs text-[var(--fg-muted)]/70 py-2">No flights added yet.</p>
+        )}
+      </div>
+
+      <div className="flex items-center gap-4">
+        <button type="button" onClick={() => fa.append({ route: "", price_inr: 0, per_person: true, date: "" })}
+          className={cn("flex items-center gap-1 text-sm", linkCls)}>
+          <PlusCircle className="w-4 h-4" /> Add flight
+        </button>
+        {onCopyRoutes && (
+          <button type="button" onClick={onCopyRoutes}
+            className="flex items-center gap-1 text-sm text-[var(--fg-muted)] hover:text-white">
+            <Copy className="w-3.5 h-3.5" /> Copy routes from Case 1
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── Case comparison card ─────────────────────────────────────────────────────
+
+function CaseComparison({
+  a, b, labelA, labelB, datesA, datesB, activeCase, onSelect,
+}: {
+  a: BudgetResult;
+  b: BudgetResult;
+  labelA: string;
+  labelB: string;
+  datesA: string;
+  datesB: string;
+  activeCase: CaseKey;
+  onSelect: (c: CaseKey) => void;
+}) {
+  const diff = b.grand_total.inr - a.grand_total.inr;
+  const cheaper: CaseKey | null = diff === 0 ? null : diff > 0 ? "a" : "b";
+
+  const tile = (key: CaseKey, label: string, dates: string, res: BudgetResult) => (
+    <button
+      type="button"
+      onClick={() => onSelect(key)}
+      className={cn(
+        "flex-1 text-left rounded-xl border p-3 transition-colors",
+        activeCase === key
+          ? "border-emerald-500/50 bg-emerald-600/10"
+          : "border-[var(--border)] hover:border-white/20"
+      )}
+    >
+      <div className="flex items-center justify-between gap-2 mb-1">
+        <span className="text-xs font-semibold text-white truncate">{label}</span>
+        {cheaper === key && (
+          <span className="text-[10px] font-semibold text-emerald-400 flex items-center gap-0.5 shrink-0">
+            <TrendingDown className="w-3 h-3" /> Cheaper
+          </span>
+        )}
+      </div>
+      <p className="text-[10px] text-[var(--fg-muted)] mb-2 flex items-center gap-1">
+        <Calendar className="w-2.5 h-2.5" /> {dates}
+      </p>
+      <p className="text-lg font-bold text-white">{formatINR(res.grand_total.inr)}</p>
+      <p className="text-[10px] text-[var(--fg-muted)] mt-0.5">
+        Flights {formatINR(res.fixed_costs.flights.total_inr)}
+      </p>
+    </button>
+  );
+
+  return (
+    <div className="glass rounded-2xl p-4 space-y-3">
+      <p className="text-sm font-medium text-white flex items-center gap-2">
+        <GitCompareArrows className="w-4 h-4 text-indigo-400" /> Compare Totals
+      </p>
+      <div className="flex gap-2">
+        {tile("a", labelA, datesA, a)}
+        {tile("b", labelB, datesB, b)}
+      </div>
+      <p className="text-xs text-center text-[var(--fg-muted)]">
+        {cheaper === null ? (
+          <>Both weeks cost the same.</>
+        ) : (
+          <>
+            <span className="text-emerald-400 font-semibold">
+              {cheaper === "a" ? labelA : labelB}
+            </span>{" "}
+            saves{" "}
+            <span className="text-white font-semibold">{formatINR(Math.abs(diff))}</span>{" "}
+            per person
+          </>
+        )}
+      </p>
+      <p className="text-[10px] text-center text-[var(--fg-muted)]/60">
+        Tap a case to see its full breakdown below.
+      </p>
+    </div>
+  );
+}
+

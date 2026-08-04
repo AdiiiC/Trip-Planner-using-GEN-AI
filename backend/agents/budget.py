@@ -21,6 +21,7 @@ class FlightCost(BaseModel):
     route:      str   = Field(..., min_length=1, max_length=200)
     price_inr:  float = Field(..., ge=0, lt=_MAX_MONEY)    # BUG-007: no negatives
     per_person: bool  = True
+    date:       str   = Field(default="", max_length=32)   # ISO travel date, optional
 
 
 class AccommodationCost(BaseModel):
@@ -71,7 +72,7 @@ def calculate_budget(inp: BudgetInput) -> dict:
     # ── 1. Flights ──────────────────────────────
     flight_items, total_flights = [], 0.0
     for f in inp.flights:
-        flight_items.append({"route": f.route, "amount_inr": round(f.price_inr, 2)})
+        flight_items.append({"route": f.route, "amount_inr": round(f.price_inr, 2), "date": f.date})
         total_flights += f.price_inr
 
     # ── 2. Accommodation ────────────────────────

@@ -9,6 +9,7 @@ export interface FlightCost {
   route: string;
   price_inr: number;
   per_person: boolean;
+  date?: string;
 }
 
 export interface AccommodationCost {
@@ -68,6 +69,7 @@ export interface BudgetResult {
 export interface FlightItem {
   route: string;
   amount_inr: number;
+  date?: string;
 }
 
 export interface StayItem {
