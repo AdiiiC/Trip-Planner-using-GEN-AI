@@ -5,11 +5,12 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useForm, useFieldArray, type Control, type UseFormRegister, type UseFormWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { PlusCircle, Trash2, Calculator, RefreshCw, ChevronDown, ChevronUp, Info, ShieldCheck, Search, ExternalLink, Calendar, Copy, GitCompareArrows, TrendingDown } from "lucide-react";
+import { PlusCircle, Trash2, Calculator, RefreshCw, ChevronDown, ChevronUp, Info, ShieldCheck, Search, ExternalLink, Calendar, Copy, GitCompareArrows, TrendingDown, Save, History, FolderOpen } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { BudgetInput, BudgetResult, VisaCheckResult } from "@/lib/types";
 import { formatINR, formatUSD, formatNumber, cn } from "@/lib/utils";
+import { loadPlans, savePlan, deletePlan, type SavedBudgetPlan } from "@/lib/budgetStorage";
 
 // ─── Route auto-formatter ────────────────────────────────────────────────────
 // Turns "BLR-SGN", "BLR > SGN", "BLR to SGN", "BLR SGN" → "BLR → SGN"
@@ -160,7 +161,7 @@ export function BudgetCalculator() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const { register, control, handleSubmit, setValue, watch, formState: { errors } } = useForm<FormValues>({
+  const { register, control, handleSubmit, setValue, watch, reset, getValues, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       travelers: 3,
@@ -293,6 +294,26 @@ export function BudgetCalculator() {
   const currencies = watch("exchange_rates").map(r => r.currency);
   const allCurrencies = [...new Set([...COMMON_CURRENCIES, ...currencies])];
 
+  // ── Saved plans (localStorage history) ──
+  const [savedPlans, setSavedPlans] = useState<SavedBudgetPlan<FormValues>[]>([]);
+  const [planName, setPlanName] = useState("");
+  useEffect(() => { setSavedPlans(loadPlans<FormValues>()); }, []);
+
+  const saveCurrentPlan = useCallback(() => {
+    setSavedPlans(savePlan<FormValues>(planName, getValues()));
+    setPlanName("");
+  }, [planName, getValues]);
+
+  const loadPlan = useCallback((plan: SavedBudgetPlan<FormValues>) => {
+    reset(plan.values);
+    setResult(null);
+    setResultB(null);
+  }, [reset]);
+
+  const removePlan = useCallback((id: string) => {
+    setSavedPlans(deletePlan<FormValues>(id));
+  }, []);
+
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
       <div className="mb-8">
@@ -304,6 +325,62 @@ export function BudgetCalculator() {
         <div className="grid lg:grid-cols-[1fr_420px] gap-6">
           {/* ── Left column: inputs ── */}
           <div className="space-y-4">
+
+            {/* Saved Plans */}
+            <SectionCard title="Saved Plans">
+              <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                <input
+                  type="text"
+                  value={planName}
+                  onChange={(e) => setPlanName(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveCurrentPlan(); } }}
+                  placeholder="Name this plan (e.g. SEA trip — Nov 2026)"
+                  className="input-dark flex-1"
+                />
+                <button
+                  type="button"
+                  onClick={saveCurrentPlan}
+                  className="flex items-center justify-center gap-1.5 text-sm font-medium rounded-lg border border-emerald-500/30 bg-emerald-600/10 text-emerald-300 hover:bg-emerald-600/20 px-3 py-2 transition-colors"
+                >
+                  <Save className="w-4 h-4" /> Save current
+                </button>
+              </div>
+
+              {savedPlans.length === 0 ? (
+                <p className="flex items-center gap-1.5 text-xs text-[var(--fg-muted)]">
+                  <History className="w-3.5 h-3.5" /> Saved plans are kept in this browser so you don&apos;t re-enter details.
+                </p>
+              ) : (
+                <ul className="space-y-1.5">
+                  {savedPlans.map((p) => (
+                    <li
+                      key={p.id}
+                      className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm text-white">{p.name}</p>
+                        <p className="text-[11px] text-[var(--fg-muted)]">{new Date(p.savedAt).toLocaleString()}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => loadPlan(p)}
+                        className="flex items-center gap-1 text-xs font-medium rounded-md border border-indigo-500/30 bg-indigo-600/10 text-indigo-300 hover:bg-indigo-600/20 px-2 py-1 transition-colors"
+                      >
+                        <FolderOpen className="w-3.5 h-3.5" /> Load
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => removePlan(p.id)}
+                        aria-label={`Delete ${p.name}`}
+                        className="text-rose-400 hover:text-rose-300 p-1 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </SectionCard>
 
             {/* Travelers */}
             <SectionCard title="Travelers">

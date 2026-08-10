@@ -33,7 +33,7 @@ interface CountryRow {
 
 // Notes a forex desk actually hands over, largest first
 const DENOMS: Record<string, number[]> = {
-  USD: [100, 50, 20],
+  USD: [100], // Indian forex desks issue USD in $100 notes only
   EUR: [100, 50, 20],
   GBP: [50, 20, 10],
   AED: [100, 50, 20],
@@ -48,7 +48,7 @@ const FALLBACK_DENOMS = [100, 50, 20, 10];
 
 // Granularity worth rounding a purchase to — not always the largest note
 const ROUND_STEP: Record<string, number> = {
-  USD: 50,
+  USD: 100,
   EUR: 50,
   GBP: 50,
   AED: 50,
