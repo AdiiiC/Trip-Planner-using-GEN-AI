@@ -23,6 +23,7 @@ export interface ItemCost {
   destination: string;
   amount: number;
   currency: string;
+  prepaid?: boolean;
 }
 
 export interface CashConversion {
@@ -50,6 +51,8 @@ export interface BudgetResult {
     extras: { items: ExtraItem[]; total_inr: number };
     total_inr: number;
     total_usd: number;
+    prepaid_total_inr: number;
+    on_ground_total_inr: number;
   };
   cash_conversion: {
     pocket_money_usd: number;
@@ -58,10 +61,14 @@ export interface BudgetResult {
     total_cash_out_inr: number;
     usd_forex_remaining_inr: number;
     usd_forex_remaining_usd: number;
+    committed_inr: number;
+    free_spend_inr: number;
   };
   grand_total: {
     inr: number;
     usd: number;
+    prepaid_inr: number;
+    pocket_money_inr: number;
   };
   rates_used: Record<string, number>;
 }
@@ -91,6 +98,7 @@ export interface ExtraItem {
   destination: string;
   original: string;
   amount_inr: number;
+  prepaid?: boolean;
 }
 
 export interface CashItem {

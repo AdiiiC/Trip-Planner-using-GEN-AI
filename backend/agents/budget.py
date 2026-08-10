@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 import math
+import re
 from pydantic import BaseModel, Field, field_validator
 from typing import Literal
 
 _CURRENCY_RE = r"^[A-Za-z]{2,4}$"
 _MAX_MONEY   = 1e12   # sanity cap: no single item > 1 trillion INR
+
+# Extras whose name implies you pay for them at home before flying — everything
+# else is assumed paid on arrival out of pocket money. "card" is intentionally
+# excluded so "SIM Card" isn't mistaken for a prepaid forex card.
+_PREPAID_HINT = re.compile(r"visa|insurance|forex|booking|deposit|ticket", re.IGNORECASE)
 
 
 # ──────────────────────────────────────────────
@@ -35,6 +41,7 @@ class ItemCost(BaseModel):
     destination: str   = Field(default="", max_length=100)
     amount:      float = Field(..., ge=0, lt=_MAX_MONEY)
     currency:    str   = Field(default="INR", min_length=2, max_length=4, pattern=_CURRENCY_RE)
+    prepaid:     bool | None = None   # None → infer from name; True/False overrides
 
 
 class CashConversion(BaseModel):
@@ -104,19 +111,32 @@ def calculate_budget(inp: BudgetInput) -> dict:
         })
         total_sightseeing += inr
 
-    # ── 4. Extras ───────────────────────────────
+    # ── 4. Extras (prepaid at home vs paid on arrival) ─────────
     extra_items, total_extras = [], 0.0
+    prepaid_extras, onground_extras = 0.0, 0.0
     for e in inp.extras:
         inr = to_inr(e.amount, e.currency)
+        is_prepaid = e.prepaid if e.prepaid is not None else bool(_PREPAID_HINT.search(e.name))
         extra_items.append({
             "name": e.name,
             "destination": e.destination,
             "original": f"{e.amount:,.0f} {e.currency}",
             "amount_inr": round(inr, 2),
+            "prepaid": is_prepaid,
         })
         total_extras += inr
+        if is_prepaid:
+            prepaid_extras += inr
+        else:
+            onground_extras += inr
 
     total_fixed = total_flights + total_stays + total_sightseeing + total_extras
+
+    # Prepaid = money that leaves before departure; sightseeing and on-arrival
+    # extras are paid on the ground out of pocket money, so they must NOT be
+    # added on top of it (that was the old double-count).
+    prepaid_total = total_flights + total_stays + prepaid_extras
+    committed_inr = total_sightseeing + onground_extras
 
     # ── 5. Cash conversion ──────────────────────
     pocket_money_inr = inp.pocket_money_usd * usd_rate
@@ -137,8 +157,12 @@ def calculate_budget(inp: BudgetInput) -> dict:
     usd_remaining_inr = pocket_money_inr - total_cash_out
     usd_remaining = usd_remaining_inr / usd_rate if usd_rate else 0.0
 
-    # ── 6. Grand total ──────────────────────────
-    grand_inr = total_fixed + pocket_money_inr
+    free_spend_inr = pocket_money_inr - committed_inr   # genuinely left after committed cash
+
+    # ── 6. Grand total (true money to mobilize) ─
+    # prepaid (flights + stays + prepaid extras) + cash carried, with no item
+    # counted twice.
+    grand_inr = prepaid_total + pocket_money_inr
     grand_usd = grand_inr / usd_rate if usd_rate else 0.0
 
     return {
@@ -150,6 +174,8 @@ def calculate_budget(inp: BudgetInput) -> dict:
             "extras":      {"items": extra_items,   "total_inr": round(total_extras, 2)},
             "total_inr": round(total_fixed, 2),
             "total_usd": round(total_fixed / usd_rate, 2) if usd_rate else 0.0,
+            "prepaid_total_inr":   round(prepaid_total, 2),
+            "on_ground_total_inr": round(committed_inr, 2),
         },
         "cash_conversion": {
             "pocket_money_usd":      inp.pocket_money_usd,
@@ -158,10 +184,14 @@ def calculate_budget(inp: BudgetInput) -> dict:
             "total_cash_out_inr":    round(total_cash_out, 2),
             "usd_forex_remaining_inr": round(usd_remaining_inr, 2),
             "usd_forex_remaining_usd": round(usd_remaining, 2),
+            "committed_inr":         round(committed_inr, 2),
+            "free_spend_inr":        round(free_spend_inr, 2),
         },
         "grand_total": {
             "inr": round(grand_inr, 2),
             "usd": round(grand_usd, 2),
+            "prepaid_inr":      round(prepaid_total, 2),
+            "pocket_money_inr": round(pocket_money_inr, 2),
         },
         "rates_used": {k: v for k, v in rates.items() if k != "INR"},
     }

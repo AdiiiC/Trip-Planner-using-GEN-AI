@@ -6,8 +6,9 @@ import { Wallet, CheckCircle2, TriangleAlert, Info, Banknote, Wand2, ArrowRight 
 import type { BudgetResult } from "@/lib/types";
 import { formatINR, formatUSD, formatNumber, cn } from "@/lib/utils";
 
-// Extras whose name looks like something you pay for in India before flying out
-const PREPAID_HINT = /visa|insurance|forex|card|booking|deposit|ticket/i;
+// Extras whose name looks like something you pay for in India before flying out.
+// Mirrors the backend classifier — "card" is excluded so "SIM Card" stays on-arrival.
+const PREPAID_HINT = /visa|insurance|forex|booking|deposit|ticket/i;
 
 const DEFAULT_NIGHTS = 3;
 const DEFAULT_DAILY_INR = 1500;
@@ -146,9 +147,18 @@ export function PocketMoneyCheck({ result }: { result: BudgetResult }) {
   );
 
   const [prepaidOverrides, setPrepaidOverrides] = useState<Record<string, boolean>>({});
-  const isPrepaid = (name: string) => prepaidOverrides[name] ?? PREPAID_HINT.test(name);
+  // Prefer the backend's classification; fall back to the name heuristic
+  const prepaidByName = useMemo(() => {
+    const m: Record<string, boolean> = {};
+    fc.extras.items.forEach((e) => {
+      if (typeof e.prepaid === "boolean") m[e.name] = e.prepaid;
+    });
+    return m;
+  }, [fc.extras.items]);
+  const prepaidDefault = (name: string) => prepaidByName[name] ?? PREPAID_HINT.test(name);
+  const isPrepaid = (name: string) => prepaidOverrides[name] ?? prepaidDefault(name);
   const togglePrepaid = (name: string) =>
-    setPrepaidOverrides((p) => ({ ...p, [name]: !(p[name] ?? PREPAID_HINT.test(name)) }));
+    setPrepaidOverrides((p) => ({ ...p, [name]: !(p[name] ?? prepaidDefault(name)) }));
 
   const update = (i: number, patch: Partial<CountryRow>) => {
     const name = rows[i]?.name;
