@@ -11,6 +11,7 @@ import { api } from "@/lib/api";
 import type { BudgetInput, BudgetResult, VisaCheckResult } from "@/lib/types";
 import { formatINR, formatUSD, formatNumber, cn } from "@/lib/utils";
 import { loadPlans, savePlan, deletePlan, type SavedBudgetPlan } from "@/lib/budgetStorage";
+import { setUserRates } from "@/lib/userRates";
 
 // ─── Route auto-formatter ────────────────────────────────────────────────────
 // Turns "BLR-SGN", "BLR > SGN", "BLR to SGN", "BLR SGN" → "BLR → SGN"
@@ -293,6 +294,16 @@ export function BudgetCalculator() {
 
   const currencies = watch("exchange_rates").map(r => r.currency);
   const allCurrencies = [...new Set([...COMMON_CURRENCIES, ...currencies])];
+
+  // Share entered rates with the Currency Converter widget on the same page
+  const watchedRates = watch("exchange_rates");
+  useEffect(() => {
+    const map: Record<string, number> = { INR: 1 };
+    watchedRates.forEach(r => {
+      if (r.currency && r.rate_to_inr > 0) map[r.currency.toUpperCase()] = r.rate_to_inr;
+    });
+    setUserRates(map);
+  }, [JSON.stringify(watchedRates)]);
 
   // ── Saved plans (localStorage history) ──
   const [savedPlans, setSavedPlans] = useState<SavedBudgetPlan<FormValues>[]>([]);
