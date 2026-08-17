@@ -28,6 +28,8 @@ interface Share {
   country: string;
   days: number;
   markdown: string;
+  /** Handle of whoever shared it. Empty for anonymous and pre-handle shares. */
+  author?: string;
   created_at: string;
 }
 
@@ -39,7 +41,7 @@ export async function generateMetadata(
   if (!share) return { title: "Trip not found" };
   const desc = `A ${share.days || ""}-day itinerary${
     share.city ? ` for ${share.city}${share.country ? `, ${share.country}` : ""}` : ""
-  } — assembled with Wayfare. Read-only shared trip.`;
+  }${share.author ? ` shared by @${share.author}` : ""} — assembled with Wayfare. Read-only shared trip.`;
 
   return {
     title: share.title,
@@ -79,7 +81,11 @@ export default async function SharedTripPage({
       <div className="flex items-center justify-between mb-8 flex-wrap gap-3">
         <div className="flex items-center gap-2 text-[11px] font-mono uppercase tracking-[0.14em] text-[var(--fg-muted)]">
           <Compass className="w-3 h-3 text-[var(--accent-hover)]" strokeWidth={2} />
-          Shared via Wayfare · Read-only
+          {share.author ? (
+            <>Shared by <span className="text-[var(--fg)] normal-case">@{share.author}</span> · Read-only</>
+          ) : (
+            <>Shared via Wayfare · Read-only</>
+          )}
         </div>
         <div className="flex items-center gap-3">
           <span className="text-[11px] font-mono text-[var(--fg-dim)] uppercase tracking-[0.12em]">

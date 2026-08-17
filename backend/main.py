@@ -8,7 +8,7 @@ from typing import AsyncIterator
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from slowapi import _rate_limit_exceeded_handler
@@ -729,9 +729,33 @@ class ShareInput(BaseModel):
     markdown: str = Field(..., min_length=10, max_length=200_000)
 
 
+def _share_author(authorization: str | None) -> str:
+    """The handle to credit on a share, or "" to stay anonymous.
+
+    Auth is optional here: sharing works logged out, and a logged-in user is only
+    credited if they chose a handle. It deliberately never falls back to any part
+    of the email address, since the share page is public.
+    """
+    if not authorization or not authorization.lower().startswith("bearer "):
+        return ""
+    from auth_security import decode_token
+    from db import SessionLocal
+    import models
+
+    user_id = decode_token(authorization.split(" ", 1)[1].strip(), expected_scope="access")
+    if user_id is None:
+        return ""
+    db = SessionLocal()
+    try:
+        user = db.get(models.User, user_id)
+        return user.username or "" if user else ""
+    finally:
+        db.close()
+
+
 @app.post("/api/share")
 @limiter.limit("10/minute")
-async def create_share(request: Request, body: ShareInput):
+async def create_share(request: Request, body: ShareInput, authorization: str | None = Header(default=None)):
     """Create a public, read-only shared trip. Returns a short id + url path."""
     share_id = uuid.uuid4().hex[:10]
 
@@ -742,6 +766,7 @@ async def create_share(request: Request, body: ShareInput):
         "country":  body.country.strip(),
         "days":     body.days,
         "markdown": body.markdown,
+        "author":   _share_author(authorization),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     _save_share(share_id, share_data)

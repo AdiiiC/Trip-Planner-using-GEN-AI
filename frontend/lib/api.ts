@@ -19,6 +19,7 @@ import type {
   WeatherInput,
   WeatherResult,
 } from "./types";
+import { authHeader } from "./authToken";
 
 const BASE =
   process.env.NEXT_PUBLIC_API_URL ??
@@ -297,6 +298,7 @@ export const api = {
     return data;
   },
 
+  /** Sharing works logged out; when signed in, the trip is credited to your handle. */
   createShare: async (body: {
     title: string;
     city: string;
@@ -306,7 +308,7 @@ export const api = {
   }): Promise<{ id: string; path: string }> => {
     const res = await fetch(`${BASE}/api/share`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...authHeader() },
       body: JSON.stringify(body),
     });
     if (!res.ok) {
