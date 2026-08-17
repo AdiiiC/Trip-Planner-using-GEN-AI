@@ -6,6 +6,16 @@ export interface SavedBudgetPlan<T = unknown> {
   name: string;
   savedAt: number;
   values: T;
+  /** What the plan last calculated to, so plans can be compared without recomputing.
+   *  Absent on plans saved before this was recorded. */
+  totalINR?: number | null;
+  nights?: number | null;
+}
+
+/** The computed figures stored alongside a plan's inputs. */
+export interface PlanTotals {
+  totalINR?: number | null;
+  nights?: number | null;
 }
 
 const KEY = "wayfare:budget:plans:v1";
@@ -39,14 +49,33 @@ function persist<T>(plans: SavedBudgetPlan<T>[]): SavedBudgetPlan<T>[] {
 }
 
 /** Save a new snapshot; newest first, capped at MAX_PLANS. */
-export function savePlan<T>(name: string, values: T): SavedBudgetPlan<T>[] {
+export function savePlan<T>(name: string, values: T, totals: PlanTotals = {}): SavedBudgetPlan<T>[] {
   const entry: SavedBudgetPlan<T> = {
     id: newId(),
     name: name.trim() || new Date().toLocaleString(),
     savedAt: Date.now(),
     values,
+    totalINR: totals.totalINR ?? null,
+    nights: totals.nights ?? null,
   };
   const next = [entry, ...loadPlans<T>()].slice(0, MAX_PLANS);
+  return persist(next);
+}
+
+/** Overwrite a plan in place, keeping its id and position. */
+export function updatePlan<T>(id: string, name: string, values: T, totals: PlanTotals = {}): SavedBudgetPlan<T>[] {
+  const next = loadPlans<T>().map((p) =>
+    p.id === id
+      ? {
+          ...p,
+          name: name.trim() || p.name,
+          savedAt: Date.now(),
+          values,
+          totalINR: totals.totalINR ?? null,
+          nights: totals.nights ?? null,
+        }
+      : p
+  );
   return persist(next);
 }
 

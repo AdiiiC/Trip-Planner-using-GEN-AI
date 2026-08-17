@@ -11,8 +11,8 @@ import { api } from "@/lib/api";
 import type { BudgetInput, BudgetResult, BudgetTarget, Settlement, VisaCheckResult } from "@/lib/types";
 import { formatINR, formatUSD, formatNumber, cn } from "@/lib/utils";
 import { setUserRates } from "@/lib/userRates";
-import { usePlans } from "@/lib/usePlans";
 import { BudgetPdfButton } from "@/components/budget/BudgetPdfButton";
+import { SavedPlans } from "@/components/budget/SavedPlans";
 
 // ─── Route auto-formatter ────────────────────────────────────────────────────
 // Turns "BLR-SGN", "BLR > SGN", "BLR to SGN", "BLR SGN" → "BLR → SGN"
@@ -375,22 +375,14 @@ export function BudgetCalculator() {
     setUserRates(map);
   }, [JSON.stringify(watchedRates)]);
 
-  // ── Saved plans (server when logged in, localStorage otherwise) ──
-  const { plans: savedPlans, save: savePlanRemote, remove: removePlanRemote, authed } = usePlans();
+  // Lives here rather than in SavedPlans because the PDF export titles itself with it.
   const [planName, setPlanName] = useState("");
-
-  const saveCurrentPlan = useCallback(async () => {
-    await savePlanRemote(planName.trim() || new Date().toLocaleString(), getValues() as unknown as Record<string, unknown>);
-    setPlanName("");
-  }, [planName, getValues, savePlanRemote]);
 
   const loadPlan = useCallback((values: Record<string, unknown>) => {
     reset(values as unknown as FormValues);
     setResult(null);
     setResultB(null);
   }, [reset]);
-
-  const removePlan = useCallback((id: string) => { void removePlanRemote(id); }, [removePlanRemote]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -406,64 +398,13 @@ export function BudgetCalculator() {
 
             {/* Saved Plans */}
             <SectionCard title="Saved Plans">
-              <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-                <input
-                  type="text"
-                  value={planName}
-                  onChange={(e) => setPlanName(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); saveCurrentPlan(); } }}
-                  placeholder="Name this plan (e.g. SEA trip — Nov 2026)"
-                  className="input-dark flex-1"
-                />
-                <button
-                  type="button"
-                  onClick={saveCurrentPlan}
-                  className="flex items-center justify-center gap-1.5 text-sm font-medium rounded-lg border border-emerald-500/30 bg-emerald-600/10 text-emerald-300 hover:bg-emerald-600/20 px-3 py-2 transition-colors"
-                >
-                  <Save className="w-4 h-4" /> Save current
-                </button>
-              </div>
-
-              {savedPlans.length === 0 ? (
-                <p className="flex items-center gap-1.5 text-xs text-[var(--fg-muted)]">
-                  <History className="w-3.5 h-3.5" />
-                  {authed
-                    ? "Saved plans sync to your account — open them on any device."
-                    : "Saved in this browser. "}
-                  {!authed && (
-                    <a href="/account" className="text-emerald-400 hover:text-emerald-300 underline">Log in to sync across devices</a>
-                  )}
-                </p>
-              ) : (
-                <ul className="space-y-1.5">
-                  {savedPlans.map((p) => (
-                    <li
-                      key={p.id}
-                      className="flex items-center gap-2 rounded-lg border border-[var(--border)] bg-black/20 px-3 py-2"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm text-white">{p.name}</p>
-                        <p className="text-[11px] text-[var(--fg-muted)]">{new Date(p.savedAt).toLocaleString()}</p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => loadPlan(p.values)}
-                        className="flex items-center gap-1 text-xs font-medium rounded-md border border-indigo-500/30 bg-indigo-600/10 text-indigo-300 hover:bg-indigo-600/20 px-2 py-1 transition-colors"
-                      >
-                        <FolderOpen className="w-3.5 h-3.5" /> Load
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => removePlan(p.id)}
-                        aria-label={`Delete ${p.name}`}
-                        className="text-rose-400 hover:text-rose-300 p-1 transition-colors"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+              <SavedPlans
+                getValues={() => getValues() as unknown as Record<string, unknown>}
+                result={activeCase === "b" && resultB ? resultB : result}
+                onLoad={loadPlan}
+                name={planName}
+                onNameChange={setPlanName}
+              />
             </SectionCard>
 
             {/* Travelers */}
