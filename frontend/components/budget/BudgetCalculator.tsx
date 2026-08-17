@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useForm, useFieldArray, type Control, type UseFormRegister, type UseFormWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { PlusCircle, Trash2, Calculator, RefreshCw, ChevronDown, ChevronUp, Info, ShieldCheck, Search, ExternalLink, Calendar, Copy, GitCompareArrows, TrendingDown, Save, History, FolderOpen } from "lucide-react";
+import { PlusCircle, Trash2, Calculator, RefreshCw, ChevronDown, ChevronUp, Info, ShieldCheck, Search, ExternalLink, Calendar, Copy, GitCompareArrows, TrendingDown, Save, History, FolderOpen, Plane, BedDouble, Ticket, Receipt, Wallet, Banknote, TriangleAlert, type LucideIcon } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { BudgetInput, BudgetResult, VisaCheckResult } from "@/lib/types";
@@ -25,10 +25,7 @@ function normalizeRoute(raw: string): string {
 }
 import { VisaBadge, VisaResultCard } from "@/components/visa/VisaCostChecker";
 import { PocketMoneyCheck } from "@/components/budget/PocketMoneyCheck";
-import {
-  PieChart, Pie, Cell, Tooltip, ResponsiveContainer,
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, LabelList,
-} from "recharts";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { useEffect, useRef, useState as useCountState } from "react";
 
 // ─── schema ───────────────────────────────────────────────────────────────────
@@ -66,7 +63,9 @@ type CaseKey = "a" | "b";
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
 const COMMON_CURRENCIES = ["USD", "EUR", "GBP", "JPY", "THB", "VND", "MYR", "SGD", "IDR", "AED", "AUD", "INR"];
-const PIE_COLORS = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+// Per-currency colours for the cash-conversion strip (category colours are fixed
+// per slice in `budgetSlices`, so the two palettes stay independent).
+const CASH_COLORS = ["#22d3ee", "#a3e635", "#fbbf24", "#f472b6", "#818cf8"];
 
 const sumLegs = (legs: FlightLeg[] = []) =>
   legs.reduce((s, f) => s + (Number.isFinite(f.price_inr) ? f.price_inr : 0), 0);
@@ -806,6 +805,96 @@ export function BudgetCalculator() {
 
 // ─── Results panel ────────────────────────────────────────────────────────────
 
+interface Slice {
+  key: string;
+  label: string;
+  value: number;
+  color: string;
+  Icon: LucideIcon;
+}
+
+/**
+ * Slices that add up to exactly the grand total.
+ * Sightseeing and on-arrival extras are spent *out of* pocket money, so they're
+ * carved out of it rather than stacked on top — otherwise the chart totals more
+ * than the money you actually need.
+ */
+function budgetSlices(result: BudgetResult): Slice[] {
+  const fc = result.fixed_costs;
+  const cc = result.cash_conversion;
+  const prepaidExtras = Math.max(fc.prepaid_total_inr - fc.flights.total_inr - fc.stays.total_inr, 0);
+  const onArrivalExtras = Math.max(fc.on_ground_total_inr - fc.sightseeing.total_inr, 0);
+
+  return ([
+    { key: "flights",    label: "Flights",           value: fc.flights.total_inr,           color: "#6366f1", Icon: Plane },
+    { key: "stays",      label: "Stays",             value: fc.stays.total_inr,             color: "#10b981", Icon: BedDouble },
+    { key: "prepaid_x",  label: "Extras (prepaid)",  value: prepaidExtras,                  color: "#8b5cf6", Icon: Receipt },
+    { key: "sights",     label: "Sightseeing",       value: fc.sightseeing.total_inr,       color: "#f59e0b", Icon: Ticket },
+    { key: "arrival_x",  label: "Extras on arrival", value: onArrivalExtras,                color: "#f97316", Icon: Banknote },
+    { key: "free",       label: "Free spending",     value: Math.max(cc.free_spend_inr, 0), color: "#ec4899", Icon: Wallet },
+  ] as Slice[]).filter(s => s.value > 0);
+}
+
+const pct = (value: number, total: number) => (total > 0 ? (value / total) * 100 : 0);
+const pctLabel = (value: number, total: number) => `${Math.round(pct(value, total))}%`;
+
+/** One rounded bar split into proportional colour segments, with a legend. */
+function SplitStrip({ segments, thick }: { segments: { label: string; value: number; color: string }[]; thick?: boolean }) {
+  const shown = segments.filter(s => s.value > 0);
+  const total = shown.reduce((s, x) => s + x.value, 0);
+  if (total <= 0) return null;
+
+  return (
+    <div className="space-y-2">
+      <div className={cn("flex w-full overflow-hidden rounded-full bg-white/5", thick ? "h-3" : "h-2")}>
+        {shown.map((s, i) => (
+          <motion.div
+            key={s.label}
+            initial={{ width: 0 }}
+            animate={{ width: `${pct(s.value, total)}%` }}
+            transition={{ duration: 0.6, delay: i * 0.07, ease: "easeOut" }}
+            style={{ background: s.color }}
+            title={`${s.label}: ${formatINR(s.value)}`}
+          />
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-x-3 gap-y-1">
+        {shown.map(s => (
+          <span key={s.label} className="flex items-center gap-1.5 text-[11px] text-[var(--fg-muted)]">
+            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: s.color }} />
+            {s.label}
+            <span className="text-white font-medium">{pctLabel(s.value, total)}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Meter({ value, total, color, delay = 0 }: { value: number; total: number; color: string; delay?: number }) {
+  return (
+    <div className="h-1.5 w-full rounded-full bg-white/5 overflow-hidden">
+      <motion.div
+        initial={{ width: 0 }}
+        animate={{ width: `${Math.min(pct(value, total), 100)}%` }}
+        transition={{ duration: 0.6, delay, ease: "easeOut" }}
+        className="h-full rounded-full"
+        style={{ background: color }}
+      />
+    </div>
+  );
+}
+
+function StatTile({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
+  return (
+    <div className="rounded-xl bg-white/3 border border-white/5 p-2.5">
+      <p className="text-[10px] uppercase tracking-wider text-[var(--fg-muted)] mb-1 truncate">{label}</p>
+      <p className="text-sm font-semibold" style={color ? { color } : undefined}>{value}</p>
+      {sub && <p className="text-[10px] text-[var(--fg-muted)] mt-0.5 truncate">{sub}</p>}
+    </div>
+  );
+}
+
 function BudgetResults({ result }: { result: BudgetResult }) {
   const fc = result.fixed_costs;
   const cc = result.cash_conversion;
@@ -830,15 +919,12 @@ function BudgetResults({ result }: { result: BudgetResult }) {
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [gt.inr]);
 
-  const chartData = [
-    { name: "Flights",      value: fc.flights.total_inr },
-    { name: "Stays",        value: fc.stays.total_inr },
-    { name: "Sightseeing",  value: fc.sightseeing.total_inr },
-    { name: "Extras",       value: fc.extras.total_inr },
-    { name: "Pocket $",     value: cc.pocket_money_inr },
-  ].filter(d => d.value > 0);
-
-  const pieData = chartData;
+  const slices = budgetSlices(result).sort((a, b) => b.value - a.value);
+  const total = slices.reduce((s, x) => s + x.value, 0);
+  const biggest = slices[0];
+  const shortfall = Math.max(-cc.free_spend_inr, 0);
+  const usdRate = result.rates_used?.USD ?? 0;
+  const toUsd = (inr: number) => (usdRate > 0 ? inr / usdRate : 0);
 
   return (
     <motion.div
@@ -846,86 +932,121 @@ function BudgetResults({ result }: { result: BudgetResult }) {
       animate={{ opacity: 1, y: 0 }}
       className="space-y-4"
     >
-      {/* Grand total — animated counter */}
-      <div className="glass rounded-2xl p-6 border border-emerald-500/30">
-        <p className="text-xs font-semibold uppercase tracking-wider text-[var(--fg-muted)] mb-1">Grand Total (Your Share)</p>
-        <p className="text-4xl font-bold gradient-text">{formatINR(displayedINR)}</p>
-        <p className="text-[var(--fg-muted)] text-sm mt-1">≈ {formatUSD(gt.usd)}</p>
+      {/* Grand total — animated counter, then how that money splits */}
+      <div className="glass rounded-2xl p-6 border border-emerald-500/30 space-y-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wider text-[var(--fg-muted)] mb-1">Grand Total (Your Share)</p>
+          <p className="text-4xl font-bold gradient-text">{formatINR(displayedINR)}</p>
+          <p className="text-[var(--fg-muted)] text-sm mt-1">≈ {formatUSD(gt.usd)}</p>
+        </div>
+
+        <SplitStrip
+          thick
+          segments={[
+            { label: "Prepaid at home", value: gt.prepaid_inr, color: "#6366f1" },
+            { label: "Booked, paid abroad", value: cc.committed_inr, color: "#f59e0b" },
+            { label: "Free to spend", value: Math.max(cc.free_spend_inr, 0), color: "#ec4899" },
+          ]}
+        />
+
+        <div className="grid grid-cols-3 gap-2">
+          <StatTile
+            label="Prepaid"
+            value={formatINR(gt.prepaid_inr)}
+            sub={`${pctLabel(gt.prepaid_inr, gt.inr)} · before you fly`}
+          />
+          <StatTile
+            label="Carried"
+            value={formatINR(cc.pocket_money_inr)}
+            sub={formatUSD(cc.pocket_money_usd)}
+          />
+          <StatTile
+            label="Free to spend"
+            value={formatINR(Math.max(cc.free_spend_inr, 0))}
+            sub={usdRate > 0 ? formatUSD(toUsd(Math.max(cc.free_spend_inr, 0))) : undefined}
+            color="#34d399"
+          />
+        </div>
+
+        {shortfall > 0 ? (
+          <p className="flex items-start gap-1.5 text-xs text-rose-300">
+            <TriangleAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+            Pocket money is {formatINR(shortfall)} short of the sightseeing and on-arrival
+            extras you&apos;ve already listed.
+          </p>
+        ) : biggest && (
+          <p className="text-xs text-[var(--fg-muted)]">
+            <span className="text-white font-medium">{biggest.label}</span> is your biggest line —{" "}
+            {pctLabel(biggest.value, total)} of the trip.
+          </p>
+        )}
       </div>
 
-      {/* Bar chart — horizontal breakdown */}
+      {/* Donut + per-category meters */}
       <div className="glass rounded-2xl p-4">
-        <p className="text-sm font-medium text-white mb-3">Breakdown</p>
-        <div className="h-48">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 40 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1f1f24" horizontal={false} />
-              <XAxis type="number" tick={false} axisLine={false} tickLine={false} />
-              <YAxis type="category" dataKey="name" tick={{ fill: "var(--fg-muted)", fontSize: 11 }} axisLine={false} tickLine={false} width={70} />
-              <Tooltip
-                formatter={(v) => formatINR(Number(v))}
-                contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--fg)" }}
-                cursor={{ fill: "rgba(99,102,241,0.08)" }}
-              />
-              <Bar dataKey="value" radius={[0, 4, 4, 0]}>
-                {chartData.map((_, i) => (
-                  <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                ))}
-                <LabelList dataKey="value" position="right" formatter={(v: unknown) => formatINR(Number(v))} style={{ fill: "var(--fg)", fontSize: 10 }} />
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+        <p className="text-sm font-medium text-white">Where the money goes</p>
+        <p className="text-[11px] text-[var(--fg-muted)] mt-0.5 mb-3">
+          Sightseeing and on-arrival extras are paid out of pocket money, so nothing is counted twice.
+        </p>
+        <div className="flex flex-col sm:flex-row items-center gap-4">
+          <div className="relative w-[168px] h-[168px] shrink-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie data={slices} dataKey="value" nameKey="label" innerRadius={54} outerRadius={80} paddingAngle={2} stroke="none">
+                  {slices.map(s => <Cell key={s.key} fill={s.color} />)}
+                </Pie>
+                <Tooltip
+                  formatter={(v, name) => [formatINR(Number(v)), String(name)]}
+                  contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--fg)" }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+            <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+              <span className="text-[10px] uppercase tracking-wider text-[var(--fg-muted)]">Total</span>
+              <span className="text-sm font-semibold text-white">{formatINR(gt.inr)}</span>
+            </div>
+          </div>
 
-      {/* Pie chart */}
-      <div className="glass rounded-2xl p-4">
-        <p className="text-sm font-medium text-white mb-3">Share</p>
-        <div className="h-40">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie data={pieData} dataKey="value" cx="50%" cy="50%" outerRadius={60} paddingAngle={2}>
-                {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
-              </Pie>
-              <Tooltip
-                formatter={(v) => formatINR(Number(v))}
-                contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--fg)" }}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="flex flex-wrap gap-2 justify-center mt-2">
-          {pieData.map((d, i) => (
-            <span key={d.name} className="flex items-center gap-1 text-xs text-[var(--fg-muted)]">
-              <span className="w-2 h-2 rounded-full" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-              {d.name}
-            </span>
-          ))}
+          <div className="flex-1 w-full space-y-2">
+            {slices.map((s, i) => (
+              <div key={s.key} className="space-y-1">
+                <div className="flex items-center gap-2 text-xs">
+                  <s.Icon className="w-3.5 h-3.5 shrink-0" style={{ color: s.color }} />
+                  <span className="text-[var(--fg-muted)] truncate">{s.label}</span>
+                  <span className="ml-auto text-white font-medium shrink-0">{formatINR(s.value)}</span>
+                  <span className="w-8 text-right text-[10px] text-[var(--fg-muted)] shrink-0">
+                    {pctLabel(s.value, total)}
+                  </span>
+                </div>
+                <Meter value={s.value} total={total} color={s.color} delay={i * 0.06} />
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Fixed costs */}
       <div className="glass rounded-2xl p-4 space-y-3">
         <p className="text-sm font-medium text-white">1. Fixed Costs</p>
-        <ResultSection label="Flights" total={fc.flights.total_inr}>
+        <ResultSection label="Flights" total={fc.flights.total_inr} of={fc.total_inr} color="#6366f1">
           {fc.flights.items.map((f, i) => (
             <Row key={i} label={f.date ? `${f.route} · ${f.date}` : f.route} value={formatINR(f.amount_inr)} />
           ))}
         </ResultSection>
-        <ResultSection label="Stays" total={fc.stays.total_inr}>
+        <ResultSection label="Stays" total={fc.stays.total_inr} of={fc.total_inr} color="#10b981">
           {fc.stays.items.map((s, i) => (
             <Row key={i} label={`${s.destination} (${s.split})`} value={formatINR(s.per_person_inr)} />
           ))}
         </ResultSection>
         {fc.sightseeing.total_inr > 0 && (
-          <ResultSection label="Sightseeing" total={fc.sightseeing.total_inr}>
+          <ResultSection label="Sightseeing" total={fc.sightseeing.total_inr} of={fc.total_inr} color="#f59e0b">
             {fc.sightseeing.items.map((s, i) => (
               <Row key={i} label={`${s.name} (${s.original})`} value={formatINR(s.amount_inr)} />
             ))}
           </ResultSection>
         )}
         {fc.extras.total_inr > 0 && (
-          <ResultSection label="Extras" total={fc.extras.total_inr}>
+          <ResultSection label="Extras" total={fc.extras.total_inr} of={fc.total_inr} color="#8b5cf6">
             {fc.extras.items.map((e, i) => (
               <Row key={i} label={`${e.name} (${e.original})`} value={formatINR(e.amount_inr)} />
             ))}
@@ -938,25 +1059,47 @@ function BudgetResults({ result }: { result: BudgetResult }) {
       </div>
 
       {/* Cash conversion */}
-      <div className="glass rounded-2xl p-4 space-y-2">
+      <div className="glass rounded-2xl p-4 space-y-3">
         <p className="text-sm font-medium text-white">2. Cash Conversion</p>
-        <Row label="Pocket money" value={`$${formatNumber(cc.pocket_money_usd)} = ${formatINR(cc.pocket_money_inr)}`} />
-        {cc.allocations.map((a, i) => (
-          <Row key={i} label={`→ ${a.display}`} value={formatINR(a.inr_spent)} sub />
-        ))}
-        <Row label="Remaining on USD/Forex card" value={`${formatUSD(cc.usd_forex_remaining_usd)} (${formatINR(cc.usd_forex_remaining_inr)})`} />
+        <SplitStrip
+          segments={[
+            ...cc.allocations.map((a, i) => ({
+              label: a.currency,
+              value: a.inr_spent,
+              color: CASH_COLORS[i % CASH_COLORS.length],
+            })),
+            { label: "USD / forex card", value: Math.max(cc.usd_forex_remaining_inr, 0), color: "#64748b" },
+          ]}
+        />
+        <div className="space-y-2">
+          <Row label="Pocket money" value={`$${formatNumber(cc.pocket_money_usd)} = ${formatINR(cc.pocket_money_inr)}`} />
+          {cc.allocations.map((a, i) => (
+            <Row key={i} label={`→ ${a.display}`} value={formatINR(a.inr_spent)} sub />
+          ))}
+          <Row label="Remaining on USD/Forex card" value={`${formatUSD(cc.usd_forex_remaining_usd)} (${formatINR(cc.usd_forex_remaining_inr)})`} />
+        </div>
       </div>
     </motion.div>
   );
 }
 
-function ResultSection({ label, total, children }: { label: string; total: number; children: React.ReactNode }) {
+function ResultSection({
+  label, total, of, color, children,
+}: { label: string; total: number; of?: number; color?: string; children: React.ReactNode }) {
   return (
     <div className="rounded-xl bg-white/3 border border-white/5 p-3 space-y-1">
-      <div className="flex justify-between text-xs font-medium text-[var(--fg-muted)] mb-1">
+      <div className="flex items-baseline justify-between text-xs font-medium text-[var(--fg-muted)]">
         <span>{label}</span>
-        <span className="text-white">{formatINR(total)}</span>
+        <span className="flex items-baseline gap-2">
+          <span className="text-white">{formatINR(total)}</span>
+          {of != null && of > 0 && <span className="text-[10px]">{pctLabel(total, of)}</span>}
+        </span>
       </div>
+      {of != null && of > 0 && (
+        <div className="pb-1.5">
+          <Meter value={total} total={of} color={color ?? "#6366f1"} />
+        </div>
+      )}
       {children}
     </div>
   );

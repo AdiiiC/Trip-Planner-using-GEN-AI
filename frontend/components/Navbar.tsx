@@ -213,14 +213,22 @@ export function Navbar() {
 function AuthNavButton() {
   const { user, status } = useAuth();
   if (status === "loading") return null;
+  // Accounts that haven't picked a handle fall back to the email's local part —
+  // never the full address.
+  const label = user ? (user.username ? `@${user.username}` : user.display_name) : "Log in";
   return (
     <Link
       href="/account"
       data-testid="nav-account"
-      className="hidden sm:inline-flex items-center h-8 rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-2.5 text-xs font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] transition-colors max-w-[160px] truncate"
-      title={user ? user.email : "Log in"}
+      className="hidden sm:inline-flex items-center gap-1.5 h-8 rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-2.5 text-xs font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] transition-colors max-w-[160px]"
+      title={user ? `${label} — account settings` : "Log in"}
     >
-      {user ? user.email : "Log in"}
+      {user && (
+        <span className="w-4 h-4 shrink-0 rounded-full bg-emerald-500/20 text-emerald-300 text-[9px] font-semibold flex items-center justify-center">
+          {user.display_name.charAt(0).toUpperCase()}
+        </span>
+      )}
+      <span className="truncate">{label}</span>
     </Link>
   );
 }

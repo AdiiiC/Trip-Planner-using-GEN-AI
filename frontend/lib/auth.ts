@@ -16,7 +16,32 @@ const TOKEN_KEY = "wayfare:auth:token";
 export interface AuthUser {
   id: number;
   email: string;
+  /** Chosen handle, or null if this account hasn't picked one yet. */
+  username: string | null;
+  /** What the UI prints — the handle, else the email's local part. */
+  display_name: string;
   is_2fa_enabled: boolean;
+}
+
+export interface UsernameAvailability {
+  username: string;
+  available: boolean;
+  reason: string | null;
+}
+
+export const USERNAME_MIN = 3;
+export const USERNAME_MAX = 20;
+
+/** Mirrors backend/usernames.py so the form can fail fast without a round-trip. */
+export function checkUsernameFormat(raw: string): string | null {
+  const handle = raw.trim();
+  if (handle.length < USERNAME_MIN || handle.length > USERNAME_MAX)
+    return `Username must be ${USERNAME_MIN}-${USERNAME_MAX} characters`;
+  if (!/^[A-Za-z][A-Za-z0-9_]*$/.test(handle))
+    return "Start with a letter; use only letters, numbers and underscores";
+  if (handle.endsWith("_") || handle.includes("__"))
+    return "Underscores can't be doubled or come last";
+  return null;
 }
 
 export interface ServerPlan {
@@ -56,14 +81,21 @@ async function req<T>(path: string, opts: RequestInit = {}, auth = false): Promi
 // ── raw API ───────────────────────────────────────────────────────────────────
 
 export const authApi = {
-  register: (email: string, password: string) =>
-    req<{ access_token: string }>("/api/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }),
+  register: (email: string, password: string, username?: string) =>
+    req<{ access_token: string }>("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify({ email, password, username: username?.trim() || null }),
+    }),
   login: (email: string, password: string) =>
     req<{ mfa_required?: boolean; mfa_token?: string; access_token?: string }>(
       "/api/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   login2fa: (mfa_token: string, code: string) =>
     req<{ access_token: string }>("/api/auth/login/2fa", { method: "POST", body: JSON.stringify({ mfa_token, code }) }),
   me: () => req<AuthUser>("/api/auth/me", {}, true),
+  setUsername: (username: string) =>
+    req<AuthUser>("/api/auth/me", { method: "PATCH", body: JSON.stringify({ username }) }, true),
+  usernameAvailable: (username: string) =>
+    req<UsernameAvailability>(`/api/auth/username-available?u=${encodeURIComponent(username)}`),
   setup2fa: () => req<{ secret: string; otpauth_uri: string }>("/api/auth/2fa/setup", { method: "POST" }, true),
   enable2fa: (code: string) =>
     req<{ recovery_codes: string[] }>("/api/auth/2fa/enable", { method: "POST", body: JSON.stringify({ code }) }, true),

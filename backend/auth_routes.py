@@ -1,11 +1,12 @@
 """Auth endpoints: register, login, TOTP 2FA setup/enable/disable, recovery."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 import models
+import usernames
 from auth_deps import get_current_user
 from auth_schemas import (
     CodeInput,
@@ -16,6 +17,8 @@ from auth_schemas import (
     RegisterInput,
     TokenResponse,
     TotpSetupResponse,
+    UsernameAvailability,
+    UsernameInput,
     UserOut,
 )
 from auth_security import (
@@ -33,30 +36,92 @@ from auth_security import (
     verify_totp,
 )
 from db import get_db
+from rate_limit import limiter
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 # Deliberately vague so attackers can't distinguish "wrong email" from "wrong password".
 _BAD_CREDS = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid email or password")
 
+_TAKEN = "That username is taken"
+
 
 def _get_user_by_email(db: Session, email: str) -> models.User | None:
     return db.scalar(select(models.User).where(models.User.email == email.lower()))
 
 
+def _validated_handle(raw: str) -> str:
+    try:
+        return usernames.clean_username(raw)
+    except usernames.UsernameError as err:
+        raise HTTPException(status_code=400, detail=str(err)) from err
+
+
+def _out(user: models.User) -> UserOut:
+    return UserOut(
+        id=user.id,
+        email=user.email,
+        username=user.username,
+        display_name=usernames.display_name(user),
+        is_2fa_enabled=user.is_2fa_enabled,
+    )
+
+
 @router.post("/register", response_model=TokenResponse, status_code=201)
-def register(body: RegisterInput, db: Session = Depends(get_db)):
+@limiter.limit("10/hour")
+def register(request: Request, body: RegisterInput, db: Session = Depends(get_db)):
     if _get_user_by_email(db, body.email):
         raise HTTPException(status_code=409, detail="An account with this email already exists")
-    user = models.User(email=body.email.lower(), password_hash=hash_password(body.password))
+
+    handle: str | None = None
+    if body.username:
+        handle = _validated_handle(body.username)
+        if usernames.is_taken(db, handle):
+            raise HTTPException(status_code=409, detail=_TAKEN)
+
+    user = models.User(
+        email=body.email.lower(),
+        username=handle,
+        password_hash=hash_password(body.password),
+    )
     db.add(user)
     db.commit()
     db.refresh(user)
     return TokenResponse(access_token=create_access_token(user.id))
 
 
+@router.get("/username-available", response_model=UsernameAvailability)
+@limiter.limit("30/minute")
+def username_available(request: Request, u: str = Query(min_length=1, max_length=32), db: Session = Depends(get_db)):
+    """Live check for the signup/rename field. Format errors come back as `reason`."""
+    try:
+        handle = usernames.clean_username(u)
+    except usernames.UsernameError as err:
+        return UsernameAvailability(username=u.strip(), available=False, reason=str(err))
+    taken = usernames.is_taken(db, handle)
+    return UsernameAvailability(username=handle, available=not taken, reason=_TAKEN if taken else None)
+
+
+@router.patch("/me", response_model=UserOut)
+@limiter.limit("10/hour")
+def set_username(
+    request: Request,
+    body: UsernameInput,
+    user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    handle = _validated_handle(body.username)
+    if usernames.is_taken(db, handle, exclude_user_id=user.id):
+        raise HTTPException(status_code=409, detail=_TAKEN)
+    user.username = handle
+    db.commit()
+    db.refresh(user)
+    return _out(user)
+
+
 @router.post("/login", response_model=LoginResponse)
-def login(body: LoginInput, db: Session = Depends(get_db)):
+@limiter.limit("20/minute")
+def login(request: Request, body: LoginInput, db: Session = Depends(get_db)):
     user = _get_user_by_email(db, body.email)
     if user is None or not verify_password(body.password, user.password_hash):
         raise _BAD_CREDS
@@ -66,7 +131,8 @@ def login(body: LoginInput, db: Session = Depends(get_db)):
 
 
 @router.post("/login/2fa", response_model=TokenResponse)
-def login_2fa(body: MfaLoginInput, db: Session = Depends(get_db)):
+@limiter.limit("20/minute")
+def login_2fa(request: Request, body: MfaLoginInput, db: Session = Depends(get_db)):
     user_id = decode_token(body.mfa_token, expected_scope="mfa")
     if user_id is None:
         raise HTTPException(status_code=401, detail="2FA session expired — please log in again")
@@ -83,7 +149,7 @@ def login_2fa(body: MfaLoginInput, db: Session = Depends(get_db)):
 
 @router.get("/me", response_model=UserOut)
 def me(user: models.User = Depends(get_current_user)):
-    return UserOut(id=user.id, email=user.email, is_2fa_enabled=user.is_2fa_enabled)
+    return _out(user)
 
 
 @router.post("/2fa/setup", response_model=TotpSetupResponse)

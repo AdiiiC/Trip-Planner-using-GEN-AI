@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     jwt_access_ttl: int = Field(default=60 * 60 * 24 * 7, alias="JWT_ACCESS_TTL")   # 7 days
     jwt_mfa_ttl: int = Field(default=300, alias="JWT_MFA_TTL")                       # 5 min
     totp_issuer: str = Field(default="Wayfare", alias="TOTP_ISSUER")
+    # Handle backfilled onto the owner's pre-existing test account on startup.
+    # Pin it to one address with SEED_USERNAME_EMAIL; blank SEED_USERNAME disables it.
+    seed_username: str = Field(default="Aadhi_123", alias="SEED_USERNAME")
+    seed_username_email: str = Field(default="", alias="SEED_USERNAME_EMAIL")
 
 
     # ── Tunables ──────────────────────────────────────────────────────────────

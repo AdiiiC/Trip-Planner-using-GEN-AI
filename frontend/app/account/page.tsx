@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
-import { ShieldCheck, LogOut, Loader2, Copy } from "lucide-react";
-import { useAuth, authApi } from "@/lib/auth";
+import { ShieldCheck, LogOut, Loader2, Copy, AtSign, Check, X, Pencil } from "lucide-react";
+import { useAuth, authApi, checkUsernameFormat, USERNAME_MAX, type AuthUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
 
 type Mode = "login" | "signup";
@@ -40,15 +40,19 @@ function AuthForms({ onToken }: { onToken: (t: string) => Promise<void> }) {
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [username, setUsername] = useState("");
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+
+  const handleState = useUsernameCheck(mode === "signup" ? username : "");
+  const handleBlocked = mode === "signup" && (handleState.status === "invalid" || handleState.status === "taken");
 
   const submit = async () => {
     setBusy(true);
     try {
       if (mode === "signup") {
-        const { access_token } = await authApi.register(email, password);
+        const { access_token } = await authApi.register(email, password, username);
         await onToken(access_token);
         toast.success("Account created");
       } else {
@@ -99,14 +103,110 @@ function AuthForms({ onToken }: { onToken: (t: string) => Promise<void> }) {
       <div className="space-y-2">
         <input className="input-dark" type="email" placeholder="Email" value={email}
           onChange={(e) => setEmail(e.target.value)} autoComplete="email" />
+        {mode === "signup" && (
+          <UsernameField
+            value={username}
+            onChange={setUsername}
+            state={handleState}
+            onEnter={submit}
+            hint="Shown across Wayfare instead of your email. Optional — you can pick one later."
+          />
+        )}
         <input className="input-dark" type="password"
           placeholder={mode === "signup" ? "Password (min 8 chars)" : "Password"} value={password}
           onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => e.key === "Enter" && submit()}
           autoComplete={mode === "signup" ? "new-password" : "current-password"} />
       </div>
-      <Button className="w-full" onClick={submit} disabled={busy || !email || !password}>
+      <Button className="w-full" onClick={submit} disabled={busy || !email || !password || handleBlocked}>
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : mode === "signup" ? "Create account" : "Log in"}
       </Button>
+    </div>
+  );
+}
+
+// ── username field + availability check ───────────────────────────────────────
+
+type HandleStatus = "idle" | "checking" | "ok" | "taken" | "invalid";
+interface HandleState { status: HandleStatus; message: string | null }
+
+/** Debounced availability lookup, with the format rules checked locally first. */
+function useUsernameCheck(value: string, currentUsername?: string | null): HandleState {
+  const handle = value.trim();
+  const isCurrent = !!currentUsername && handle.toLowerCase() === currentUsername.toLowerCase();
+  const formatError = handle && !isCurrent ? checkUsernameFormat(handle) : null;
+  const shouldAsk = !!handle && !isCurrent && !formatError;
+
+  // Keyed by handle so a stale answer never labels a newer input.
+  const [answer, setAnswer] = useState<{ handle: string; state: HandleState } | null>(null);
+
+  useEffect(() => {
+    if (!shouldAsk) return;
+    let alive = true;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await authApi.usernameAvailable(handle);
+        if (!alive) return;
+        setAnswer({
+          handle,
+          state: res.available
+            ? { status: "ok", message: `${res.username} is available` }
+            : { status: "taken", message: res.reason ?? "That username is taken" },
+        });
+      } catch {
+        // Offline or rate-limited — stay quiet and let submit be the judge.
+        if (alive) setAnswer({ handle, state: { status: "idle", message: null } });
+      }
+    }, 450);
+
+    return () => { alive = false; clearTimeout(timer); };
+  }, [handle, shouldAsk]);
+
+  if (!handle) return { status: "idle", message: null };
+  if (isCurrent) return { status: "ok", message: "This is your current username" };
+  if (formatError) return { status: "invalid", message: formatError };
+  if (answer?.handle === handle) return answer.state;
+  return { status: "checking", message: null };
+}
+
+function UsernameField({
+  value, onChange, state, hint, autoFocus, onEnter,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  state: HandleState;
+  hint?: string;
+  autoFocus?: boolean;
+  onEnter?: () => void;
+}) {
+  const tone =
+    state.status === "ok" ? "text-emerald-400" :
+    state.status === "checking" ? "text-[var(--fg-muted)]" :
+    "text-red-400";
+
+  return (
+    <div className="space-y-1">
+      <div className="relative">
+        <AtSign className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[var(--fg-muted)]" />
+        <input
+          className="input-dark pl-9"
+          placeholder="Username"
+          value={value}
+          maxLength={USERNAME_MAX}
+          autoFocus={autoFocus}
+          autoComplete="username"
+          spellCheck={false}
+          onChange={(e) => onChange(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && onEnter?.()}
+        />
+        <span className="absolute right-3 top-1/2 -translate-y-1/2">
+          {state.status === "checking" && <Loader2 className="w-4 h-4 animate-spin text-[var(--fg-muted)]" />}
+          {state.status === "ok" && <Check className="w-4 h-4 text-emerald-400" />}
+          {(state.status === "taken" || state.status === "invalid") && <X className="w-4 h-4 text-red-400" />}
+        </span>
+      </div>
+      {state.message
+        ? <p className={`text-xs ${tone}`}>{state.message}</p>
+        : hint && <p className="text-xs text-[var(--fg-muted)]">{hint}</p>}
     </div>
   );
 }
@@ -115,19 +215,94 @@ function AuthForms({ onToken }: { onToken: (t: string) => Promise<void> }) {
 
 function LoggedIn({
   user, onLogout, onChanged,
-}: { user: { email: string; is_2fa_enabled: boolean }; onLogout: () => void; onChanged: () => Promise<void> }) {
+}: { user: AuthUser; onLogout: () => void; onChanged: () => Promise<void> }) {
   return (
     <div className="space-y-4">
-      <div className="glass rounded-2xl p-6 flex items-center justify-between">
-        <div>
-          <p className="text-xs text-[var(--fg-muted)]">Signed in as</p>
-          <p className="font-medium">{user.email}</p>
+      <div className="glass rounded-2xl p-6 space-y-4">
+        <div className="flex items-center gap-3">
+          <div className="w-11 h-11 shrink-0 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-300 font-semibold">
+            {user.display_name.charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0">
+            <p className="font-medium truncate">
+              {user.username ? `@${user.username}` : user.display_name}
+            </p>
+            <p className="text-xs text-[var(--fg-muted)] truncate">{user.email}</p>
+          </div>
+          <Button variant="outline" size="sm" className="ml-auto shrink-0" onClick={onLogout}>
+            <LogOut className="w-4 h-4 mr-1.5" /> Log out
+          </Button>
         </div>
-        <Button variant="outline" size="sm" onClick={onLogout}>
-          <LogOut className="w-4 h-4 mr-1.5" /> Log out
-        </Button>
+        <UsernameSettings user={user} onChanged={onChanged} />
       </div>
       <TwoFactor enabled={user.is_2fa_enabled} onChanged={onChanged} />
+    </div>
+  );
+}
+
+function UsernameSettings({ user, onChanged }: { user: AuthUser; onChanged: () => Promise<void> }) {
+  const [editing, setEditing] = useState(!user.username);
+  const [value, setValue] = useState(user.username ?? "");
+  const [busy, setBusy] = useState(false);
+  const state = useUsernameCheck(editing ? value : "", user.username);
+
+  const save = async () => {
+    setBusy(true);
+    try {
+      await authApi.setUsername(value.trim());
+      await onChanged();
+      setEditing(false);
+      toast.success("Username updated");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <button
+        onClick={() => { setValue(user.username ?? ""); setEditing(true); }}
+        className="flex items-center gap-1.5 text-xs text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
+      >
+        <Pencil className="w-3.5 h-3.5" /> Change username
+      </button>
+    );
+  }
+
+  const unchanged = value.trim().toLowerCase() === (user.username ?? "").toLowerCase();
+  const blocked = busy || unchanged || state.status !== "ok";
+
+  return (
+    <div className="rounded-xl border border-[var(--border)] p-4 space-y-3">
+      {!user.username && (
+        <p className="text-sm">
+          <span className="font-medium">Pick a username.</span>{" "}
+          <span className="text-[var(--fg-muted)]">
+            It replaces your email everywhere in the app, so you&apos;re not showing your
+            address on shared plans.
+          </span>
+        </p>
+      )}
+      <UsernameField
+        value={value}
+        onChange={setValue}
+        state={state}
+        autoFocus
+        onEnter={() => { if (!blocked) save(); }}
+        hint={`3-${USERNAME_MAX} characters: letters, numbers and underscores.`}
+      />
+      <div className="flex gap-2">
+        <Button size="sm" onClick={save} disabled={blocked}>
+          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : user.username ? "Save" : "Set username"}
+        </Button>
+        {user.username && (
+          <Button variant="outline" size="sm" onClick={() => setEditing(false)} disabled={busy}>
+            Cancel
+          </Button>
+        )}
+      </div>
     </div>
   );
 }

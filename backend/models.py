@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from db import Base
@@ -18,6 +18,10 @@ class User(Base):
 
     id:            Mapped[int]  = mapped_column(Integer, primary_key=True)
     email:         Mapped[str]  = mapped_column(String(320), unique=True, index=True, nullable=False)
+    # Public display handle. Null for accounts created before handles existed, and
+    # for anyone who signs up without choosing one; uniqueness is case-insensitive
+    # (see the functional index below) while the chosen casing is preserved.
+    username:      Mapped[str | None] = mapped_column(String(32), nullable=True)
     password_hash: Mapped[str]  = mapped_column(String(255), nullable=False)
     # Encrypted TOTP secret (Fernet); null until 2FA is set up.
     totp_secret:   Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -26,6 +30,11 @@ class User(Base):
 
     plans:          Mapped[list["BudgetPlan"]]   = relationship(back_populates="user", cascade="all, delete-orphan")
     recovery_codes: Mapped[list["RecoveryCode"]] = relationship(back_populates="user", cascade="all, delete-orphan")
+
+
+# "aadhi_123" and "Aadhi_123" must not be two different accounts. NULLs stay
+# exempt on both SQLite and Postgres, so handle-less accounts are unaffected.
+Index("ix_users_username_lower", func.lower(User.username), unique=True)
 
 
 class BudgetPlan(Base):
