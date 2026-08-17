@@ -24,7 +24,7 @@ function normalizeRoute(raw: string): string {
   return v;
 }
 import { VisaBadge, VisaResultCard } from "@/components/visa/VisaCostChecker";
-import { PocketMoneyCheck } from "@/components/budget/PocketMoneyCheck";
+import { PrepaidExtras } from "@/components/budget/PrepaidExtras";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, ReferenceLine } from "recharts";
 import { useEffect, useRef, useState as useCountState } from "react";
 
@@ -53,7 +53,7 @@ const schema = z.object({
     paid_by: z.string().optional(),
   })),
   sightseeing: z.array(z.object({ name: z.string().min(1), destination: z.string(), amount: z.number().min(0), currency: z.string(), paid_by: z.string().optional() })),
-  extras: z.array(z.object({ name: z.string().min(1), destination: z.string(), amount: z.number().min(0), currency: z.string(), paid_by: z.string().optional() })),
+  extras: z.array(z.object({ name: z.string().min(1), destination: z.string(), amount: z.number().min(0), currency: z.string(), prepaid: z.boolean().optional(), paid_by: z.string().optional() })),
   pocket_money_usd: z.number().min(0),
   cash_conversions: z.array(z.object({ currency: z.string().min(1), amount_inr: z.number().min(0) })),
   // Trip length: a date range, or a night count when the dates aren't fixed yet.
@@ -284,6 +284,16 @@ export function BudgetCalculator() {
   });
 
   const onSubmit = (data: FormValues) => mutation.mutate(data);
+
+  // An extra moving between prepaid and on-arrival changes what pocket money has
+  // to cover, so it needs a round trip through the backend rather than a local sum.
+  const togglePrepaid = useCallback((name: string, prepaid: boolean) => {
+    const i = getValues("extras").findIndex((e) => e.name === name);
+    if (i < 0) return;
+    setValue(`extras.${i}.prepaid`, prepaid);
+    const view = activeCase;
+    handleSubmit((data) => mutation.mutate(data, { onSuccess: () => setActiveCase(view) }))();
+  }, [getValues, setValue, handleSubmit, mutation, activeCase]);
 
   const compareEnabled = watch("compare_enabled");
 
@@ -898,9 +908,11 @@ export function BudgetCalculator() {
                 />
               )}
               {result && (
-                <PocketMoneyCheck
-                  key={`pmc-${activeCase}`}
-                  result={activeCase === "b" && resultB ? resultB : result}
+                <PrepaidExtras
+                  key={`prepaid-${activeCase}`}
+                  items={(activeCase === "b" && resultB ? resultB : result).fixed_costs.extras.items}
+                  onToggle={togglePrepaid}
+                  busy={mutation.isPending}
                 />
               )}
               {!result && (
