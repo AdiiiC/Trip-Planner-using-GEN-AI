@@ -50,7 +50,11 @@ def create_mfa_token(user_id: int) -> str:
     return _encode(str(user_id), "mfa", settings.jwt_mfa_ttl)
 
 
-def decode_token(token: str, expected_scope: str) -> int | None:
+def decode_token_claims(token: str, expected_scope: str) -> tuple[int, datetime] | None:
+    """The user id plus when the token was issued, or None if it isn't usable.
+
+    Callers need `iat` to reject tokens minted before a password change.
+    """
     try:
         payload = jwt.decode(token, settings.jwt_secret, algorithms=["HS256"])
     except jwt.PyJWTError:
@@ -58,9 +62,16 @@ def decode_token(token: str, expected_scope: str) -> int | None:
     if payload.get("scope") != expected_scope:
         return None
     try:
-        return int(payload["sub"])
-    except (KeyError, ValueError, TypeError):
+        user_id = int(payload["sub"])
+        issued_at = datetime.fromtimestamp(int(payload["iat"]), tz=timezone.utc)
+    except (KeyError, ValueError, TypeError, OverflowError, OSError):
         return None
+    return user_id, issued_at
+
+
+def decode_token(token: str, expected_scope: str) -> int | None:
+    claims = decode_token_claims(token, expected_scope)
+    return None if claims is None else claims[0]
 
 
 # ── TOTP ──────────────────────────────────────────────────────────────────────
@@ -97,3 +108,15 @@ def generate_recovery_codes(n: int = 8) -> list[str]:
 
 def hash_recovery_code(code: str) -> str:
     return hashlib.sha256(code.strip().lower().encode()).hexdigest()
+
+
+# ── emailed link tokens ─────────────────────────────────────────────────────
+
+def new_url_token() -> str:
+    """Password-reset / email-verification token. 32 bytes of entropy, URL-safe."""
+    return secrets.token_urlsafe(32)
+
+
+def hash_url_token(token: str) -> str:
+    """Only this digest is stored, so a leaked database can't be replayed."""
+    return hashlib.sha256(token.strip().encode()).hexdigest()

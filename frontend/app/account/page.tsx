@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
-import { ShieldCheck, LogOut, Loader2, Copy, AtSign, Check, X, Pencil } from "lucide-react";
+import { ShieldCheck, LogOut, Loader2, Copy, AtSign, Check, X, Pencil, MailWarning } from "lucide-react";
 import { useAuth, authApi, checkUsernameFormat, USERNAME_MAX, type AuthUser } from "@/lib/auth";
 import { Button } from "@/components/ui/button";
+import { ForgotPasswordCard } from "./ForgotPasswordCard";
 
 type Mode = "login" | "signup";
 
@@ -44,6 +45,7 @@ function AuthForms({ onToken }: { onToken: (t: string) => Promise<void> }) {
   const [mfaToken, setMfaToken] = useState<string | null>(null);
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [forgot, setForgot] = useState(false);
 
   const handleState = useUsernameCheck(mode === "signup" ? username : "");
   const handleBlocked = mode === "signup" && (handleState.status === "invalid" || handleState.status === "taken");
@@ -80,6 +82,10 @@ function AuthForms({ onToken }: { onToken: (t: string) => Promise<void> }) {
       setBusy(false);
     }
   };
+
+  if (forgot) {
+    return <ForgotPasswordCard initialEmail={email} onBack={() => setForgot(false)} />;
+  }
 
   if (mfaToken) {
     return (
@@ -120,6 +126,14 @@ function AuthForms({ onToken }: { onToken: (t: string) => Promise<void> }) {
       <Button className="w-full" onClick={submit} disabled={busy || !email || !password || handleBlocked}>
         {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : mode === "signup" ? "Create account" : "Log in"}
       </Button>
+      {mode === "login" && (
+        <button
+          onClick={() => setForgot(true)}
+          className="text-xs text-[var(--fg-muted)] hover:text-[var(--fg)] transition-colors"
+        >
+          Forgot password?
+        </button>
+      )}
     </div>
   );
 }
@@ -234,8 +248,42 @@ function LoggedIn({
           </Button>
         </div>
         <UsernameSettings user={user} onChanged={onChanged} />
+        {!user.email_verified && <VerifyEmailRow />}
       </div>
       <TwoFactor enabled={user.is_2fa_enabled} onChanged={onChanged} />
+    </div>
+  );
+}
+
+/** Disappears for good once the address is confirmed. Nothing is gated on it. */
+function VerifyEmailRow() {
+  const [busy, setBusy] = useState(false);
+  const [sent, setSent] = useState(false);
+
+  const resend = async () => {
+    setBusy(true);
+    try {
+      await authApi.requestVerification();
+      setSent(true);
+      toast.success("Confirmation link sent");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="flex items-center gap-2 text-xs text-[var(--fg-muted)]">
+      <MailWarning className="w-3.5 h-3.5 shrink-0 text-amber-400" />
+      <span>Email not verified</span>
+      {sent ? (
+        <span className="ml-auto">Check your inbox</span>
+      ) : (
+        <button onClick={resend} disabled={busy} className="ml-auto hover:text-[var(--fg)] transition-colors disabled:opacity-50">
+          {busy ? "Sending…" : "Resend link"}
+        </button>
+      )}
     </div>
   );
 }

@@ -44,6 +44,16 @@ class Settings(BaseSettings):
     seed_username: str = Field(default="Aadhi_123", alias="SEED_USERNAME")
     seed_username_email: str = Field(default="", alias="SEED_USERNAME_EMAIL")
 
+    # ── Outgoing email ────────────────────────────────────────────────────────
+    # Password-reset and verification links only. Leave SMTP_HOST blank to run
+    # without a mail server: links are then logged instead (DEBUG only).
+    smtp_host: str = Field(default="", alias="SMTP_HOST")
+    smtp_port: int = Field(default=587, alias="SMTP_PORT")     # 587 STARTTLS, 465 implicit TLS
+    smtp_user: str = Field(default="", alias="SMTP_USER")
+    smtp_password: str = Field(default="", alias="SMTP_PASSWORD")
+    smtp_from: str = Field(default="", alias="SMTP_FROM")
+    # Public origin of the frontend — the base of every emailed link.
+    app_base_url: str = Field(default="http://localhost:3000", alias="APP_BASE_URL")
 
     # ── Tunables ──────────────────────────────────────────────────────────────
     llm_cache_ttl: int = Field(default=900, alias="LLM_CACHE_TTL")          # 15 min
@@ -57,6 +67,15 @@ class Settings(BaseSettings):
     @property
     def has_fallback(self) -> bool:
         return bool(self.openrouter_api_key)
+
+    @property
+    def has_smtp(self) -> bool:
+        return bool(self.smtp_host)
+
+    @property
+    def mail_from(self) -> str:
+        """Envelope sender. Falls back to the login user so SMTP_FROM is optional."""
+        return self.smtp_from or self.smtp_user
 
     @property
     def cors_origins(self) -> list[str]:
