@@ -62,6 +62,8 @@ function BudgetDoc({ result, title }: { result: BudgetResult; title: string }) {
   const fc = result.fixed_costs;
   const cc = result.cash_conversion;
   const gt = result.grand_total;
+  // Absent from results computed by a backend that predates these fields.
+  const { trip, target, settlement } = result;
   const now = new Date().toLocaleString();
 
   return (
@@ -112,6 +114,60 @@ function BudgetDoc({ result, title }: { result: BudgetResult; title: string }) {
           <Line l="Already committed (sightseeing + on-arrival extras)" r={inr(cc.committed_inr)} boldRow />
           <Line l="Free to spend" r={inr(cc.free_spend_inr)} boldRow />
         </View>
+
+        {/* Pacing — only when the trip length or a target is known */}
+        {trip && (trip.days > 0 || target) && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>3. Per Day &amp; Target</Text>
+            {trip.days > 0 && (
+              <>
+                <Line l="Trip length" m={trip.start_date && trip.end_date ? `${trip.start_date} → ${trip.end_date}` : undefined}
+                  r={`${trip.nights} nights / ${trip.days} days`} />
+                <Line l="All-in per day" r={inr(trip.per_day_all_in_inr)} />
+                <Line l="Cash per day (pocket money)" r={inr(trip.per_day_on_ground_inr)} />
+                <Line l="Free to spend per day" r={inr(trip.per_day_free_inr)} />
+                <Line l="Per night on stays" r={inr(trip.per_night_stay_inr)} />
+              </>
+            )}
+            {target && (
+              <>
+                <Line l="Budget target" m={target.per_day_inr > 0 ? `${inr(target.per_day_inr)}/day` : undefined}
+                  r={inr(target.amount_inr)} />
+                <Line
+                  l={target.status === "over" ? "Over target by" : "Under target by"}
+                  m={`${Math.round(target.pct_used)}% used`}
+                  r={inr(Math.abs(target.delta_inr))}
+                  boldRow
+                />
+                {target.crossover_day != null && (
+                  <Line l="Running total passes the target on" r={target.crossover_day === 0 ? "departure" : `day ${target.crossover_day}`} />
+                )}
+              </>
+            )}
+          </View>
+        )}
+
+        {/* Group ledger */}
+        {settlement && (
+          <View style={s.section} break={settlement.members.length > 8}>
+            <Text style={s.sectionTitle}>4. Settle Up ({settlement.party_size} travellers)</Text>
+            {settlement.members.map((m) => (
+              <Line
+                key={m.name}
+                l={m.name}
+                m={`paid ${inr(m.paid_inr)} · owes ${inr(m.share_inr)}`}
+                r={Math.abs(m.net_inr) < 1 ? "square" : m.net_inr > 0 ? `gets ${inr(m.net_inr)}` : `owes ${inr(-m.net_inr)}`}
+              />
+            ))}
+            {settlement.transfers.length > 0 && <Text style={s.subTitle}>Transfers</Text>}
+            {settlement.transfers.map((t, i) => (
+              <Line key={i} l={`${t.from} → ${t.to}`} r={inr(t.amount_inr)} boldRow />
+            ))}
+            {settlement.unattributed_inr > 0 && (
+              <Line l="Not in the ledger (everyone paid their own)" r={inr(settlement.unattributed_inr)} />
+            )}
+          </View>
+        )}
 
         <Text style={s.footer}>
           Figures are per person. Grand total = prepaid (flights + stays + prepaid extras) + pocket money; sightseeing and
