@@ -35,6 +35,31 @@ class CodeInput(BaseModel):
     code: str = Field(min_length=6, max_length=20)
 
 
+class ForgotPasswordInput(BaseModel):
+    email: EmailStr
+
+
+# `new_password` mirrors RegisterInput.password so a reset can't sneak past the
+# strength rules signup enforces.
+class ResetPasswordInput(BaseModel):
+    token:        str = Field(min_length=16, max_length=512)
+    new_password: str = Field(min_length=8, max_length=128)
+
+
+class ChangePasswordInput(BaseModel):
+    current_password: str = Field(min_length=1, max_length=128)
+    new_password:     str = Field(min_length=8, max_length=128)
+
+
+class VerifyEmailInput(BaseModel):
+    token: str = Field(min_length=16, max_length=512)
+
+
+class MessageResponse(BaseModel):
+    """Deliberately bland text for flows that must not reveal account state."""
+    detail: str
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type:   str = "bearer"
@@ -64,6 +89,8 @@ class UserOut(BaseModel):
     # What the UI should print. Never the full email address.
     display_name:    str
     is_2fa_enabled:  bool
+    # Nothing is gated on this — the UI only nudges.
+    email_verified:  bool
 
 
 class TotpSetupResponse(BaseModel):
@@ -78,11 +105,29 @@ class RecoveryCodesResponse(BaseModel):
 class PlanInput(BaseModel):
     name:    str = Field(min_length=1, max_length=200)
     payload: dict[str, Any]
+    # The computed result, stored alongside the inputs so saved plans can be listed
+    # and ranked without recalculating each one. Optional: a plan can be saved
+    # before it has ever been calculated.
+    result:    dict[str, Any] | None = None
+    total_inr: float | None = Field(default=None, ge=0)
+    nights:    int | None   = Field(default=None, ge=0, le=365)
 
 
 class PlanOut(BaseModel):
     id:         int
     name:       str
     payload:    dict[str, Any]
+    result:     dict[str, Any] | None = None
+    total_inr:  float | None = None
+    nights:     int | None = None
+    version_count: int = 0
     created_at: str
     updated_at: str
+
+
+class PlanVersionOut(BaseModel):
+    """A past state of a plan, newest first. `payload` drives the diff view."""
+    id:         int
+    payload:    dict[str, Any]
+    total_inr:  float | None = None
+    created_at: str
