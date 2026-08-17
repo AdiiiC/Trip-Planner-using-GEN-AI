@@ -14,4 +14,4 @@ pyotp
 qrcode[pil]
 email-validator
 cryptography
-psycopg2-binary
+psycopg[binary]

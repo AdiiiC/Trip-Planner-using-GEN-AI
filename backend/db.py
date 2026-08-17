@@ -8,10 +8,13 @@ from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 
 from config import settings
 
-# Render hands out URLs starting with "postgres://"; SQLAlchemy 2.0 needs "postgresql://".
+# Render hands out "postgres://" URLs; pin the psycopg (v3) driver explicitly so
+# SQLAlchemy doesn't default to psycopg2 (which lacks wheels on newer Python).
 _db_url = settings.database_url
 if _db_url.startswith("postgres://"):
-    _db_url = "postgresql://" + _db_url[len("postgres://"):]
+    _db_url = "postgresql+psycopg://" + _db_url[len("postgres://"):]
+elif _db_url.startswith("postgresql://"):
+    _db_url = "postgresql+psycopg://" + _db_url[len("postgresql://"):]
 
 # SQLite needs check_same_thread off for FastAPI's threadpool; Postgres ignores it.
 _is_sqlite = _db_url.startswith("sqlite")
