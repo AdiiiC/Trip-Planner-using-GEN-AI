@@ -33,17 +33,21 @@ class Base(DeclarativeBase):
 
 def init_db() -> None:
     import models  # noqa: F401 — register mappers before create_all
-    Base.metadata.create_all(bind=engine)
-    _add_username_column()
+    from migrate import run_migrations
+
+    if not run_migrations():
+        # Alembic couldn't run (missing dependency, unreachable history). Better a
+        # booting app on a best-effort schema than a hard failure on deploy.
+        Base.metadata.create_all(bind=engine)
+        _add_username_column()
     _seed_owner_username()
 
 
 def _add_username_column() -> None:
-    """Additive migration for databases created before handles existed.
+    """Fallback for the create_all path only; normally migration 0002 does this.
 
     `create_all` skips tables that already exist, so an already-deployed `users`
-    table never gains the new column on its own and there is no Alembic setup here.
-    Both statements are idempotent and safe to run on every boot.
+    table never gains the new column on its own. Both statements are idempotent.
     """
     insp = inspect(engine)
     if "users" not in insp.get_table_names():
