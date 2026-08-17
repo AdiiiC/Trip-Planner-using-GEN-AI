@@ -3,27 +3,19 @@ from __future__ import annotations
 
 import os
 import pathlib
-import sys
 import tempfile
 
-import pytest
-
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
-
-_DB = pathlib.Path(tempfile.gettempdir()) / "test_share_attribution.db"
-_DB.unlink(missing_ok=True)
-os.environ["DATABASE_URL"] = f"sqlite:///{_DB}"
-# Keep shares out of the repo's data/shares.json during tests.
+# Without Redis the share store falls back to a JSON file in the repo.
 os.environ.setdefault("REDIS_URL", "")
 
-from fastapi.testclient import TestClient  # noqa: E402
+import pytest
+from fastapi.testclient import TestClient
 
-import main  # noqa: E402
-from db import init_db  # noqa: E402
-from main import app  # noqa: E402
+import main
+from db import init_db
+from main import app
 
-# Without Redis, shares fall back to a JSON file that lives in the repo — send the
-# test's writes to a scratch file instead.
+# Send those writes to a scratch file instead.
 main._SHARES_FILE = pathlib.Path(tempfile.gettempdir()) / "test_shares.json"
 main._SHARES_FILE.unlink(missing_ok=True)
 

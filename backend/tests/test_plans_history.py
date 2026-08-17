@@ -1,25 +1,14 @@
 """Saved plans: stored results, version history, restore, and ownership."""
 from __future__ import annotations
 
-import os
-import pathlib
-import sys
-import tempfile
-
 import pytest
+from fastapi.testclient import TestClient
 
-sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
+from fastapi import FastAPI
 
-_DB = pathlib.Path(tempfile.gettempdir()) / "test_plans_history.db"
-_DB.unlink(missing_ok=True)
-os.environ["DATABASE_URL"] = f"sqlite:///{_DB}"
-
-from fastapi.testclient import TestClient  # noqa: E402
-
-import plans_routes  # noqa: E402
-from auth_routes import router as auth_router  # noqa: E402
-from db import init_db  # noqa: E402
-from fastapi import FastAPI  # noqa: E402
+import plans_routes
+from auth_routes import router as auth_router
+from db import init_db
 
 app = FastAPI()
 app.include_router(auth_router)
