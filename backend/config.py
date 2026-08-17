@@ -33,6 +33,14 @@ class Settings(BaseSettings):
     rapidapi_key: str = Field(default="", alias="RAPIDAPI_KEY")
     debug: bool = Field(default=False, alias="DEBUG")
 
+    # ── Auth / accounts ───────────────────────────────────────────────────────
+    database_url: str = Field(default="sqlite:///./tripplanner.db", alias="DATABASE_URL")
+    jwt_secret: str = Field(default="dev-insecure-change-me", alias="JWT_SECRET")
+    jwt_access_ttl: int = Field(default=60 * 60 * 24 * 7, alias="JWT_ACCESS_TTL")   # 7 days
+    jwt_mfa_ttl: int = Field(default=300, alias="JWT_MFA_TTL")                       # 5 min
+    totp_issuer: str = Field(default="Wayfare", alias="TOTP_ISSUER")
+
+
     # ── Tunables ──────────────────────────────────────────────────────────────
     llm_cache_ttl: int = Field(default=900, alias="LLM_CACHE_TTL")          # 15 min
     rate_limit: str = Field(default="60/minute", alias="RATE_LIMIT")

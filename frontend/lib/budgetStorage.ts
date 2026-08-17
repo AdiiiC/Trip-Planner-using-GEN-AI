@@ -54,6 +54,11 @@ export function deletePlan<T = unknown>(id: string): SavedBudgetPlan<T>[] {
   return persist(loadPlans<T>().filter((p) => p.id !== id));
 }
 
+export function clearPlans(): void {
+  if (typeof window === "undefined") return;
+  try { window.localStorage.removeItem(KEY); } catch { /* ignore */ }
+}
+
 export function renamePlan<T = unknown>(id: string, name: string): SavedBudgetPlan<T>[] {
   const next = loadPlans<T>().map((p) => (p.id === id ? { ...p, name: name.trim() || p.name } : p));
   return persist(next);

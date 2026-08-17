@@ -10,8 +10,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { BudgetInput, BudgetResult, VisaCheckResult } from "@/lib/types";
 import { formatINR, formatUSD, formatNumber, cn } from "@/lib/utils";
-import { loadPlans, savePlan, deletePlan, type SavedBudgetPlan } from "@/lib/budgetStorage";
 import { setUserRates } from "@/lib/userRates";
+import { usePlans } from "@/lib/usePlans";
+import { BudgetPdfButton } from "@/components/budget/BudgetPdfButton";
 
 // ─── Route auto-formatter ────────────────────────────────────────────────────
 // Turns "BLR-SGN", "BLR > SGN", "BLR to SGN", "BLR SGN" → "BLR → SGN"
@@ -305,25 +306,22 @@ export function BudgetCalculator() {
     setUserRates(map);
   }, [JSON.stringify(watchedRates)]);
 
-  // ── Saved plans (localStorage history) ──
-  const [savedPlans, setSavedPlans] = useState<SavedBudgetPlan<FormValues>[]>([]);
+  // ── Saved plans (server when logged in, localStorage otherwise) ──
+  const { plans: savedPlans, save: savePlanRemote, remove: removePlanRemote, authed } = usePlans();
   const [planName, setPlanName] = useState("");
-  useEffect(() => { setSavedPlans(loadPlans<FormValues>()); }, []);
 
-  const saveCurrentPlan = useCallback(() => {
-    setSavedPlans(savePlan<FormValues>(planName, getValues()));
+  const saveCurrentPlan = useCallback(async () => {
+    await savePlanRemote(planName.trim() || new Date().toLocaleString(), getValues() as unknown as Record<string, unknown>);
     setPlanName("");
-  }, [planName, getValues]);
+  }, [planName, getValues, savePlanRemote]);
 
-  const loadPlan = useCallback((plan: SavedBudgetPlan<FormValues>) => {
-    reset(plan.values);
+  const loadPlan = useCallback((values: Record<string, unknown>) => {
+    reset(values as unknown as FormValues);
     setResult(null);
     setResultB(null);
   }, [reset]);
 
-  const removePlan = useCallback((id: string) => {
-    setSavedPlans(deletePlan<FormValues>(id));
-  }, []);
+  const removePlan = useCallback((id: string) => { void removePlanRemote(id); }, [removePlanRemote]);
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -359,7 +357,13 @@ export function BudgetCalculator() {
 
               {savedPlans.length === 0 ? (
                 <p className="flex items-center gap-1.5 text-xs text-[var(--fg-muted)]">
-                  <History className="w-3.5 h-3.5" /> Saved plans are kept in this browser so you don&apos;t re-enter details.
+                  <History className="w-3.5 h-3.5" />
+                  {authed
+                    ? "Saved plans sync to your account — open them on any device."
+                    : "Saved in this browser. "}
+                  {!authed && (
+                    <a href="/account" className="text-emerald-400 hover:text-emerald-300 underline">Log in to sync across devices</a>
+                  )}
                 </p>
               ) : (
                 <ul className="space-y-1.5">
@@ -374,7 +378,7 @@ export function BudgetCalculator() {
                       </div>
                       <button
                         type="button"
-                        onClick={() => loadPlan(p)}
+                        onClick={() => loadPlan(p.values)}
                         className="flex items-center gap-1 text-xs font-medium rounded-md border border-indigo-500/30 bg-indigo-600/10 text-indigo-300 hover:bg-indigo-600/20 px-2 py-1 transition-colors"
                       >
                         <FolderOpen className="w-3.5 h-3.5" /> Load
@@ -755,6 +759,14 @@ export function BudgetCalculator() {
               />
             )}
             <AnimatePresence>
+              {result && (
+                <div className="flex justify-end">
+                  <BudgetPdfButton
+                    result={activeCase === "b" && resultB ? resultB : result}
+                    title={planName || "Trip Budget"}
+                  />
+                </div>
+              )}
               {result && (
                 <BudgetResults
                   key={activeCase}

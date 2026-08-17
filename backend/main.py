@@ -58,6 +58,10 @@ from agents.best_time import BestTimeInput, best_time_to_visit
 from agents.cash_predict import CashPredictInput, predict_cash
 from agents.attraction_price import AttractionPriceInput, get_attraction_price
 
+from db import init_db
+from auth_routes import router as auth_router
+from plans_routes import router as plans_router
+
 # ── logging ──────────────────────────────────────────────────────────────────
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -175,6 +179,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ── accounts: auth + saved-plan sync ─────────────────────────────────────────
+
+@app.on_event("startup")
+def _init_accounts_db() -> None:
+    init_db()
+
+
+app.include_router(auth_router)
+app.include_router(plans_router)
 
 # ── debug mode (never enable in production) ───────────────────────────────────
 DEBUG = settings.debug

@@ -39,3 +39,6 @@ credentials.json
 *.pem
 *.key
 .credentials
+
+# Local SQLite dev database
+*.db

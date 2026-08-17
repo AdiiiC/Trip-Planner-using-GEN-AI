@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/lib/auth";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -162,6 +163,8 @@ export function Navbar() {
 
           <ThemeToggle />
 
+          <AuthNavButton />
+
           <Button asChild size="sm" className="hidden sm:inline-flex" data-testid="nav-cta-plan">
             <Link href="/planner">Plan a trip</Link>
           </Button>
@@ -204,5 +207,20 @@ export function Navbar() {
         </div>
       )}
     </header>
+  );
+}
+
+function AuthNavButton() {
+  const { user, status } = useAuth();
+  if (status === "loading") return null;
+  return (
+    <Link
+      href="/account"
+      data-testid="nav-account"
+      className="hidden sm:inline-flex items-center h-8 rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-2.5 text-xs font-medium text-[var(--fg-muted)] hover:text-[var(--fg)] hover:border-[var(--border-strong)] transition-colors max-w-[160px] truncate"
+      title={user ? user.email : "Log in"}
+    >
+      {user ? user.email : "Log in"}
+    </Link>
   );
 }

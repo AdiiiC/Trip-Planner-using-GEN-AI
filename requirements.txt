@@ -7,3 +7,11 @@ gradio
 pydantic
 python-dotenv
 grandalf
+sqlalchemy
+pyjwt
+passlib[argon2]
+pyotp
+qrcode[pil]
+email-validator
+cryptography
+psycopg2-binary

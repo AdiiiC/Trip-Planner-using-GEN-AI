@@ -2,6 +2,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ThemeProvider } from "next-themes";
 import { useState, useEffect } from "react";
+import { useAuth } from "@/lib/auth";
 
 // PostHog analytics — only activates when NEXT_PUBLIC_POSTHOG_KEY is set
 // Sign up free at https://posthog.com · add key to Vercel env vars
@@ -34,8 +35,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
     <ThemeProvider attribute="data-theme" defaultTheme="dark" enableSystem={false}>
       <QueryClientProvider client={client}>
         <PostHogInit />
+        <AuthHydrator />
         {children}
       </QueryClientProvider>
     </ThemeProvider>
   );
+}
+
+function AuthHydrator() {
+  const hydrate = useAuth((s) => s.hydrate);
+  useEffect(() => { void hydrate(); }, [hydrate]);
+  return null;
 }
