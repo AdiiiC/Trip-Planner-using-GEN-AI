@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useForm, useFieldArray, type Control, type UseFormRegister, type UseFormWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { PlusCircle, Trash2, Calculator, RefreshCw, ChevronDown, ChevronUp, Info, ShieldCheck, Search, ExternalLink, Calendar, Copy, GitCompareArrows, TrendingDown, Save, History, FolderOpen, Plane, BedDouble, Ticket, Receipt, Wallet, Banknote, TriangleAlert, CalendarDays, Target, Users, ArrowRight, type LucideIcon } from "lucide-react";
+import { PlusCircle, Trash2, Calculator, RefreshCw, ChevronDown, ChevronUp, Info, ShieldCheck, Search, ExternalLink, Calendar, Copy, GitCompareArrows, TrendingDown, Plane, BedDouble, Ticket, Receipt, Wallet, Banknote, TriangleAlert, CalendarDays, Users, ArrowRight, type LucideIcon } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import type { BudgetInput, BudgetResult, BudgetTarget, Settlement, VisaCheckResult } from "@/lib/types";
@@ -68,6 +68,59 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 type FlightLeg = z.infer<typeof flightSchema>;
 type CaseKey = "a" | "b";
+
+// Plans saved before a field existed carry no value for it, so `reset` needs
+// something to fall back on — see withDefaults below.
+const DEFAULT_VALUES: FormValues = {
+  travelers: 3,
+  exchange_rates: [
+    { currency: "USD", rate_to_inr: 97.11 },
+    { currency: "MYR", rate_to_inr: 24.19 },
+    { currency: "VND", rate_to_inr: 0.00386 },
+  ],
+  flights: [
+    { route: "BLR → SGN", price_inr: 17083, per_person: true, date: "" },
+    { route: "SGN → KUL", price_inr: 8295,  per_person: true, date: "" },
+    { route: "KUL → BLR", price_inr: 15984, per_person: true, date: "" },
+  ],
+  case_a_label: "Week 1",
+  compare_enabled: false,
+  flights_b: [],
+  case_b_label: "Week 2",
+  accommodations: [
+    { destination: "Da Nang",      total_cost_inr: 7241,  split_type: "group" },
+    { destination: "HCMC",         total_cost_inr: 12194, split_type: "group" },
+    { destination: "Johor Bahru",  total_cost_inr: 8415,  split_type: "individual" },
+    { destination: "Kuala Lumpur", total_cost_inr: 3463,  split_type: "individual" },
+  ],
+  sightseeing: [
+    { name: "Vietnam Attractions", destination: "Vietnam", amount: 2695000, currency: "VND" },
+    { name: "Malaysia Attractions",destination: "Malaysia",amount: 251,     currency: "MYR" },
+  ],
+  extras: [
+    { name: "SIM Card", destination: "Vietnam", amount: 185000, currency: "VND" },
+  ],
+  pocket_money_usd: 750,
+  cash_conversions: [
+    { currency: "VND", amount_inr: 6000 },
+    { currency: "MYR", amount_inr: 9000 },
+  ],
+  start_date: "",
+  end_date: "",
+  nights: 0,
+  budget_target_inr: 0,
+  party: [],
+};
+
+/** Loaded plan values, with anything the payload predates filled in. */
+function withDefaults(values: Record<string, unknown>): FormValues {
+  // Nulls are dropped alongside undefined: a JSON round-trip can turn an absent
+  // field into either, and both would blank a field the form expects to exist.
+  const present = Object.fromEntries(
+    Object.entries(values).filter(([, v]) => v !== undefined && v !== null)
+  );
+  return { ...DEFAULT_VALUES, ...present } as FormValues;
+}
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -205,46 +258,7 @@ export function BudgetCalculator() {
 
   const { register, control, handleSubmit, setValue, watch, reset, getValues, formState: { errors } } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      travelers: 3,
-      exchange_rates: [
-        { currency: "USD", rate_to_inr: 97.11 },
-        { currency: "MYR", rate_to_inr: 24.19 },
-        { currency: "VND", rate_to_inr: 0.00386 },
-      ],
-      flights: [
-        { route: "BLR → SGN", price_inr: 17083, per_person: true, date: "" },
-        { route: "SGN → KUL", price_inr: 8295,  per_person: true, date: "" },
-        { route: "KUL → BLR", price_inr: 15984, per_person: true, date: "" },
-      ],
-      case_a_label: "Week 1",
-      compare_enabled: false,
-      flights_b: [],
-      case_b_label: "Week 2",
-      accommodations: [
-        { destination: "Da Nang",      total_cost_inr: 7241,  split_type: "group" },
-        { destination: "HCMC",         total_cost_inr: 12194, split_type: "group" },
-        { destination: "Johor Bahru",  total_cost_inr: 8415,  split_type: "individual" },
-        { destination: "Kuala Lumpur", total_cost_inr: 3463,  split_type: "individual" },
-      ],
-      sightseeing: [
-        { name: "Vietnam Attractions", destination: "Vietnam", amount: 2695000, currency: "VND" },
-        { name: "Malaysia Attractions",destination: "Malaysia",amount: 251,     currency: "MYR" },
-      ],
-      extras: [
-        { name: "SIM Card", destination: "Vietnam", amount: 185000, currency: "VND" },
-      ],
-      pocket_money_usd: 750,
-      cash_conversions: [
-        { currency: "VND", amount_inr: 6000 },
-        { currency: "MYR", amount_inr: 9000 },
-      ],
-      start_date: "",
-      end_date: "",
-      nights: 0,
-      budget_target_inr: 0,
-      party: [],
-    },
+    defaultValues: DEFAULT_VALUES,
   });
 
   const exRates    = useFieldArray({ control, name: "exchange_rates" });
@@ -379,7 +393,9 @@ export function BudgetCalculator() {
   const [planName, setPlanName] = useState("");
 
   const loadPlan = useCallback((values: Record<string, unknown>) => {
-    reset(values as unknown as FormValues);
+    // reset() replaces the entire form, so a plan saved before a field existed
+    // would leave that field undefined and crash on first render.
+    reset(withDefaults(values));
     setResult(null);
     setResultB(null);
   }, [reset]);
