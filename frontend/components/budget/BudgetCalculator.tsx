@@ -5,10 +5,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useForm, useFieldArray, type Control, type UseFormRegister, type UseFormWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { PlusCircle, Trash2, Calculator, RefreshCw, ChevronDown, ChevronUp, Info, ShieldCheck, Search, ExternalLink, Calendar, Copy, GitCompareArrows, TrendingDown, Save, History, FolderOpen, Plane, BedDouble, Ticket, Receipt, Wallet, Banknote, TriangleAlert, type LucideIcon } from "lucide-react";
+import { PlusCircle, Trash2, Calculator, RefreshCw, ChevronDown, ChevronUp, Info, ShieldCheck, Search, ExternalLink, Calendar, Copy, GitCompareArrows, TrendingDown, Save, History, FolderOpen, Plane, BedDouble, Ticket, Receipt, Wallet, Banknote, TriangleAlert, CalendarDays, Target, Users, ArrowRight, type LucideIcon } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { BudgetInput, BudgetResult, VisaCheckResult } from "@/lib/types";
+import type { BudgetInput, BudgetResult, BudgetTarget, Settlement, VisaCheckResult } from "@/lib/types";
 import { formatINR, formatUSD, formatNumber, cn } from "@/lib/utils";
 import { setUserRates } from "@/lib/userRates";
 import { usePlans } from "@/lib/usePlans";
@@ -25,7 +25,7 @@ function normalizeRoute(raw: string): string {
 }
 import { VisaBadge, VisaResultCard } from "@/components/visa/VisaCostChecker";
 import { PocketMoneyCheck } from "@/components/budget/PocketMoneyCheck";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, ReferenceLine } from "recharts";
 import { useEffect, useRef, useState as useCountState } from "react";
 
 // ─── schema ───────────────────────────────────────────────────────────────────
@@ -35,6 +35,7 @@ const flightSchema = z.object({
   price_inr: z.number().min(0),
   per_person: z.boolean(),
   date: z.string().optional(),
+  paid_by: z.string().optional(),
 });
 
 const schema = z.object({
@@ -49,11 +50,19 @@ const schema = z.object({
     destination: z.string().min(1),
     total_cost_inr: z.number().min(0),
     split_type: z.enum(["individual", "group"]),
+    paid_by: z.string().optional(),
   })),
-  sightseeing: z.array(z.object({ name: z.string().min(1), destination: z.string(), amount: z.number().min(0), currency: z.string() })),
-  extras: z.array(z.object({ name: z.string().min(1), destination: z.string(), amount: z.number().min(0), currency: z.string() })),
+  sightseeing: z.array(z.object({ name: z.string().min(1), destination: z.string(), amount: z.number().min(0), currency: z.string(), paid_by: z.string().optional() })),
+  extras: z.array(z.object({ name: z.string().min(1), destination: z.string(), amount: z.number().min(0), currency: z.string(), paid_by: z.string().optional() })),
   pocket_money_usd: z.number().min(0),
   cash_conversions: z.array(z.object({ currency: z.string().min(1), amount_inr: z.number().min(0) })),
+  // Trip length: a date range, or a night count when the dates aren't fixed yet.
+  start_date: z.string(),
+  end_date: z.string(),
+  nights: z.number().min(0).max(365),
+  budget_target_inr: z.number().min(0),
+  // Wrapped in objects because useFieldArray can't track bare strings.
+  party: z.array(z.object({ name: z.string() })),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -81,6 +90,15 @@ function dateRangeLabel(legs: FlightLeg[] = []): string {
     : `${fmt(dates[0])} – ${fmt(dates[dates.length - 1])}`;
 }
 
+/** Nights between two ISO dates, or 0 if the range makes no sense. */
+function nightsBetween(start?: string, end?: string): number {
+  if (!start || !end) return 0;
+  const from = Date.parse(`${start}T00:00:00`);
+  const to = Date.parse(`${end}T00:00:00`);
+  if (!Number.isFinite(from) || !Number.isFinite(to) || to <= from) return 0;
+  return Math.round((to - from) / 86_400_000);
+}
+
 /** Strip comparison-only fields and drop blank rows before hitting the API. */
 function toBudgetInput(d: FormValues, legs: FlightLeg[]): BudgetInput {
   return {
@@ -93,12 +111,18 @@ function toBudgetInput(d: FormValues, legs: FlightLeg[]): BudgetInput {
         price_inr: f.price_inr,
         per_person: f.per_person,
         date: f.date || "",
+        paid_by: f.paid_by || "",
       })),
     accommodations: d.accommodations,
     sightseeing: d.sightseeing,
     extras: d.extras,
     pocket_money_usd: d.pocket_money_usd,
     cash_conversions: d.cash_conversions,
+    start_date: d.start_date || "",
+    end_date: d.end_date || "",
+    nights: d.nights || 0,
+    budget_target_inr: d.budget_target_inr || 0,
+    party: d.party.map(p => p.name.trim()).filter(Boolean),
   };
 }
 
@@ -141,6 +165,23 @@ function Label({ children }: { children: React.ReactNode }) {
 
 function Field({ children, className }: { children: React.ReactNode; className?: string }) {
   return <div className={cn("flex flex-col", className)}>{children}</div>;
+}
+
+/**
+ * Who fronted this bill. Absent from the DOM entirely outside group mode, so solo
+ * planning stays as uncluttered as it was.
+ */
+function PaidByField({ members, ...select }: { members: string[] } & React.ComponentProps<"select">) {
+  if (members.length < 2) return null;
+  return (
+    <Field className="w-36">
+      <Label>Paid by</Label>
+      <select className="input-dark" {...select}>
+        <option value="">Each their own</option>
+        {members.map(m => <option key={m} value={m}>{m}</option>)}
+      </select>
+    </Field>
+  );
 }
 
 // ─── main component ───────────────────────────────────────────────────────────
@@ -198,6 +239,11 @@ export function BudgetCalculator() {
         { currency: "VND", amount_inr: 6000 },
         { currency: "MYR", amount_inr: 9000 },
       ],
+      start_date: "",
+      end_date: "",
+      nights: 0,
+      budget_target_inr: 0,
+      party: [],
     },
   });
 
@@ -206,6 +252,7 @@ export function BudgetCalculator() {
   const sight      = useFieldArray({ control, name: "sightseeing" });
   const xtra       = useFieldArray({ control, name: "extras" });
   const cashConv   = useFieldArray({ control, name: "cash_conversions" });
+  const party      = useFieldArray({ control, name: "party" });
 
   const mutation = useMutation({
     mutationFn: async (data: FormValues) => {
@@ -239,6 +286,29 @@ export function BudgetCalculator() {
   const copyRoutesFromA = useCallback(() => {
     setValue("flights_b", watch("flights").map(f => ({ ...f, date: "" })));
   }, [watch, setValue]);
+
+  // ── Trip length ──
+  const startDate = watch("start_date");
+  const endDate = watch("end_date");
+  const datedNights = nightsBetween(startDate, endDate);
+  // The dates win when they form a real range; the manual count covers "we know
+  // it's a week, we haven't booked yet".
+  const effectiveNights = datedNights || watch("nights") || 0;
+
+  // The flight legs usually already say when the trip starts and ends.
+  const flightDates = watch("flights").map(f => f.date).filter((d): d is string => !!d).sort();
+  const useFlightDates = useCallback(() => {
+    const dates = watch("flights").map(f => f.date).filter((d): d is string => !!d).sort();
+    if (dates.length < 2) return;
+    setValue("start_date", dates[0]);
+    setValue("end_date", dates[dates.length - 1]);
+  }, [watch, setValue]);
+
+  // ── Group mode ──
+  const partyNames = watch("party").map(p => p.name.trim()).filter(Boolean);
+  const groupMode = partyNames.length >= 2;
+  const travelers = watch("travelers");
+  const partyMismatch = partyNames.length > 0 && partyNames.length !== travelers;
 
   // Add visa cost to extras list
   const addVisaToBudget = useCallback((name: string, amount: number, currency: string) => {
@@ -405,6 +475,99 @@ export function BudgetCalculator() {
               </Field>
             </SectionCard>
 
+            {/* Trip length & target */}
+            <SectionCard title="Trip Length & Target">
+              <p className="text-xs text-[var(--fg-muted)] flex items-center gap-1 mb-2">
+                <Info className="w-3 h-3" /> Tells you what the trip costs per day, not just in total
+              </p>
+              <div className="grid sm:grid-cols-2 gap-2">
+                <Field>
+                  <Label>Start date</Label>
+                  <input type="date" className="input-dark" {...register("start_date")} />
+                </Field>
+                <Field>
+                  <Label>End date</Label>
+                  <input type="date" className="input-dark" {...register("end_date")} />
+                </Field>
+              </div>
+
+              {flightDates.length >= 2 && (
+                <button type="button" onClick={useFlightDates}
+                  className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300">
+                  <Calendar className="w-3 h-3" /> Use your flight dates ({dateRangeLabel(watch("flights"))})
+                </button>
+              )}
+
+              <div className="grid sm:grid-cols-2 gap-2 pt-1">
+                <Field>
+                  <Label>Nights</Label>
+                  {datedNights > 0 ? (
+                    <div className="input-dark flex items-center text-[var(--fg-muted)]">
+                      {datedNights} <span className="ml-1 text-[10px]">from dates</span>
+                    </div>
+                  ) : (
+                    <input type="number" min={0} max={365} className="input-dark"
+                      {...register("nights", { valueAsNumber: true })} />
+                  )}
+                </Field>
+                <Field>
+                  <Label>Budget target (₹, optional)</Label>
+                  <input type="number" inputMode="decimal" min={0} className="input-dark"
+                    placeholder="e.g. 120000"
+                    {...register("budget_target_inr", { valueAsNumber: true })} />
+                </Field>
+              </div>
+
+              <p className="text-[10px] text-[var(--fg-muted)]/60">
+                {effectiveNights > 0
+                  ? `${effectiveNights} night${effectiveNights === 1 ? "" : "s"} · ${effectiveNights + 1} days of spending.`
+                  : "Add dates or a night count to unlock per-day figures and the burn-down chart."}
+              </p>
+            </SectionCard>
+
+            {/* Group trip */}
+            <SectionCard title="Group Trip & Settle-up" defaultOpen={false}>
+              <p className="text-xs text-[var(--fg-muted)] flex items-center gap-1 mb-2">
+                <Info className="w-3 h-3" /> Name everyone, then mark who paid each bill — we&apos;ll work out who owes whom
+              </p>
+              <div className="space-y-2">
+                {party.fields.map((f, i) => (
+                  <div key={f.id} className="flex gap-2 items-end">
+                    <Field className="flex-1">
+                      <Label>{i === 0 ? "You" : `Traveller ${i + 1}`}</Label>
+                      <input className="input-dark" placeholder="Name or @handle"
+                        {...register(`party.${i}.name`)} />
+                    </Field>
+                    <button type="button" onClick={() => party.remove(i)} aria-label="Remove traveller"
+                      className="mb-0.5 text-red-400/60 hover:text-red-400">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button type="button" onClick={() => party.append({ name: "" })}
+                className="mt-2 flex items-center gap-1 text-emerald-400 text-sm hover:text-emerald-300">
+                <PlusCircle className="w-4 h-4" /> Add traveller
+              </button>
+
+              {partyMismatch && (
+                <p className="flex items-start gap-1.5 text-[11px] text-amber-300 mt-2">
+                  <TriangleAlert className="w-3.5 h-3.5 shrink-0 mt-px" />
+                  You&apos;ve named {partyNames.length} {partyNames.length === 1 ? "person" : "people"} but
+                  travellers is set to {travelers}.
+                  <button type="button" onClick={() => setValue("travelers", partyNames.length)}
+                    className="underline hover:text-amber-200">
+                    Set it to {partyNames.length}
+                  </button>
+                </p>
+              )}
+              {!groupMode && party.fields.length > 0 && (
+                <p className="text-[10px] text-[var(--fg-muted)]/60 mt-2">
+                  Add a second name to turn on the settle-up ledger.
+                </p>
+              )}
+            </SectionCard>
+
             {/* Exchange Rates */}
             <SectionCard title="Exchange Rates (→ INR)">
               <div className="flex items-center justify-between mb-2">
@@ -466,6 +629,7 @@ export function BudgetCalculator() {
                 labelField="case_a_label"
                 accent="emerald"
                 badge="Case 1"
+                members={partyNames}
               />
 
               <div className="pt-3 mt-3 border-t border-[var(--border)]">
@@ -507,6 +671,7 @@ export function BudgetCalculator() {
                         accent="indigo"
                         badge="Case 2"
                         onCopyRoutes={copyRoutesFromA}
+                        members={partyNames}
                       />
                     </div>
                   </motion.div>
@@ -542,6 +707,7 @@ export function BudgetCalculator() {
                             <option value="individual">Individual</option>
                           </select>
                         </Field>
+                        <PaidByField members={partyNames} {...register(`accommodations.${i}.paid_by`)} />
                         <button type="button" onClick={() => stays.remove(i)} className="mb-0.5 text-red-400/60 hover:text-red-400">
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -647,6 +813,7 @@ export function BudgetCalculator() {
                           {allCurrencies.map(c => <option key={c}>{c}</option>)}
                         </select>
                       </Field>
+                      <PaidByField members={partyNames} {...register(`sightseeing.${i}.paid_by`)} />
                       <button type="button" onClick={() => sight.remove(i)} className="mb-0.5 text-red-400/60 hover:text-red-400">
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -680,6 +847,7 @@ export function BudgetCalculator() {
                         {allCurrencies.map(c => <option key={c}>{c}</option>)}
                       </select>
                     </Field>
+                    <PaidByField members={partyNames} {...register(`extras.${i}.paid_by`)} />
                     <button type="button" onClick={() => xtra.remove(i)} className="mb-0.5 text-red-400/60 hover:text-red-400">
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -885,6 +1053,213 @@ function Meter({ value, total, color, delay = 0 }: { value: number; total: numbe
   );
 }
 
+/** Short money for chart axes, where ₹1,20,000 doesn't fit. */
+function compactINR(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 100_000) return `₹${(value / 100_000).toFixed(abs >= 1_000_000 ? 0 : 1)}L`;
+  if (abs >= 1_000) return `₹${Math.round(value / 1_000)}k`;
+  return `₹${Math.round(value)}`;
+}
+
+/** Progress ring against the budget target. Fills past the ring when over. */
+function TargetRing({ target }: { target: BudgetTarget }) {
+  const over = target.status === "over";
+  const color = over ? "#fb7185" : "#34d399";
+  const radius = 38;
+  const circumference = 2 * Math.PI * radius;
+  const filled = Math.min(Math.max(target.pct_used, 0), 100);
+
+  return (
+    <div className="relative w-[104px] h-[104px] shrink-0">
+      <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+        <circle cx="50" cy="50" r={radius} fill="none" stroke="rgba(255,255,255,0.07)" strokeWidth="9" />
+        <motion.circle
+          cx="50" cy="50" r={radius} fill="none" stroke={color} strokeWidth="9" strokeLinecap="round"
+          strokeDasharray={circumference}
+          initial={{ strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset: circumference * (1 - filled / 100) }}
+          transition={{ duration: 0.9, ease: "easeOut" }}
+        />
+      </svg>
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-lg font-bold leading-none" style={{ color }}>{Math.round(target.pct_used)}%</span>
+        <span className="text-[9px] uppercase tracking-wider text-[var(--fg-muted)] mt-1">of target</span>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Per-day pacing and the burn-down: prepaid money is already gone at departure,
+ * then pocket money drains across the trip.
+ */
+function TripPacing({ result }: { result: BudgetResult }) {
+  // The frontend and backend deploy independently, so tolerate a result computed
+  // by a backend that predates these fields.
+  const { trip, target } = result;
+  if (!trip || (trip.days === 0 && !target)) return null;
+
+  const hasChart = trip.days >= 2;
+  const dailyOver = target != null && target.daily_delta_pct > 0;
+
+  return (
+    <div className="glass rounded-2xl p-4 space-y-3">
+      <p className="text-sm font-medium text-white flex items-center gap-2">
+        <CalendarDays className="w-4 h-4 text-indigo-400" />
+        {trip.nights > 0 ? `${trip.nights} nights · ${trip.days} days of spending` : "Pace & target"}
+      </p>
+
+      {trip.days > 0 && (
+        <div className="grid grid-cols-2 gap-2">
+          <StatTile label="All-in per day" value={formatINR(trip.per_day_all_in_inr)} sub="everything ÷ days" />
+          <StatTile label="Cash per day" value={formatINR(trip.per_day_on_ground_inr)} sub="pocket money ÷ days" color="#34d399" />
+          <StatTile label="Free per day" value={formatINR(trip.per_day_free_inr)} sub="after booked costs" />
+          <StatTile label="Per night stay" value={formatINR(trip.per_night_stay_inr)} sub="your share" />
+        </div>
+      )}
+
+      {target && (
+        <div className="flex items-center gap-4 rounded-xl bg-white/3 border border-white/5 p-3">
+          <TargetRing target={target} />
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm font-semibold" style={{ color: target.status === "over" ? "#fb7185" : "#34d399" }}>
+              {target.status === "over"
+                ? `${formatINR(target.delta_inr)} over`
+                : `${formatINR(Math.abs(target.delta_inr))} to spare`}
+            </p>
+            <p className="text-[11px] text-[var(--fg-muted)]">
+              Target {formatINR(target.amount_inr)}
+              {target.per_day_inr > 0 && <> · {formatINR(target.per_day_inr)}/day allowance</>}
+            </p>
+            {target.per_day_inr > 0 && (
+              <p className="text-[11px] text-[var(--fg-muted)]">
+                You&apos;re pacing{" "}
+                <span className={dailyOver ? "text-rose-300 font-medium" : "text-emerald-300 font-medium"}>
+                  {Math.abs(target.daily_delta_pct)}% {dailyOver ? "over" : "under"}
+                </span>{" "}
+                your daily average.
+              </p>
+            )}
+            {target.crossover_day != null && (
+              <p className="text-[11px] text-amber-300">
+                {target.crossover_day === 0
+                  ? "Prepaid costs alone already pass the target."
+                  : `You cross the target on day ${target.crossover_day}.`}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
+      {hasChart && (
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[11px] text-[var(--fg-muted)]">Burn-down</p>
+            <div className="flex items-center gap-3 text-[10px] text-[var(--fg-muted)]">
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-emerald-400" /> Cash left
+              </span>
+              <span className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-indigo-400" /> Spent so far
+              </span>
+            </div>
+          </div>
+          <div className="h-[150px] -ml-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={trip.burn_down} margin={{ top: 4, right: 6, bottom: 0, left: 0 }}>
+                <defs>
+                  <linearGradient id="cashLeft" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#34d399" stopOpacity={0.35} />
+                    <stop offset="100%" stopColor="#34d399" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="day" tick={{ fontSize: 10, fill: "var(--fg-muted)" }} tickLine={false} axisLine={false} />
+                <YAxis tickFormatter={compactINR} tick={{ fontSize: 10, fill: "var(--fg-muted)" }} tickLine={false} axisLine={false} width={44} />
+                <Tooltip
+                  formatter={(v, name) => [formatINR(Number(v)), name === "cash_left_inr" ? "Cash left" : "Spent so far"]}
+                  labelFormatter={(day) => (day === 0 ? "Departure" : `Day ${day}`)}
+                  contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--fg)", fontSize: 12 }}
+                />
+                {target && (
+                  <ReferenceLine y={target.amount_inr} stroke="#fb7185" strokeDasharray="4 4" strokeWidth={1}
+                    label={{ value: "Target", position: "insideTopRight", fill: "#fb7185", fontSize: 9 }} />
+                )}
+                <Area type="monotone" dataKey="cash_left_inr" stroke="#34d399" strokeWidth={2} fill="url(#cashLeft)" />
+                <Line type="monotone" dataKey="cumulative_inr" stroke="#818cf8" strokeWidth={2} dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Who fronted what, and the shortest set of transfers that squares everyone up. */
+function SettleUp({ settlement }: { settlement: Settlement }) {
+  const { members, transfers, group_total_inr, unattributed_inr } = settlement;
+  const biggest = Math.max(...members.map(m => Math.abs(m.net_inr)), 1);
+
+  return (
+    <div className="glass rounded-2xl p-4 space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-sm font-medium text-white flex items-center gap-2">
+          <Users className="w-4 h-4 text-amber-400" /> Settle up
+        </p>
+        <span className="text-[11px] text-[var(--fg-muted)]">{formatINR(group_total_inr)} fronted</span>
+      </div>
+
+      <div className="space-y-2">
+        {members.map(m => {
+          const owed = m.net_inr > 0;
+          const color = Math.abs(m.net_inr) < 1 ? "#64748b" : owed ? "#34d399" : "#fb7185";
+          return (
+            <div key={m.name} className="space-y-1">
+              <div className="flex items-baseline gap-2 text-xs">
+                <span className="text-white truncate">{m.name}</span>
+                <span className="text-[10px] text-[var(--fg-muted)] shrink-0">
+                  paid {formatINR(m.paid_inr)} · owes {formatINR(m.share_inr)}
+                </span>
+                <span className="ml-auto font-medium shrink-0" style={{ color }}>
+                  {Math.abs(m.net_inr) < 1
+                    ? "square"
+                    : owed
+                      ? `gets ${formatINR(m.net_inr)}`
+                      : `owes ${formatINR(-m.net_inr)}`}
+                </span>
+              </div>
+              <Meter value={Math.abs(m.net_inr)} total={biggest} color={color} />
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="border-t border-[var(--border)] pt-2 space-y-1.5">
+        {transfers.length === 0 ? (
+          <p className="text-xs text-[var(--fg-muted)]">
+            All square — mark who paid each bill to see who owes whom.
+          </p>
+        ) : (
+          transfers.map((t, i) => (
+            <div key={i} className="flex items-center gap-2 text-xs">
+              <span className="text-white truncate">{t.from}</span>
+              <ArrowRight className="w-3 h-3 text-[var(--fg-muted)] shrink-0" />
+              <span className="text-white truncate">{t.to}</span>
+              <span className="ml-auto font-semibold text-amber-300 shrink-0">{formatINR(t.amount_inr)}</span>
+            </div>
+          ))
+        )}
+        {unattributed_inr > 0 && (
+          <p className="text-[10px] text-[var(--fg-muted)]/70 pt-1">
+            {formatINR(unattributed_inr)} isn&apos;t in the ledger — those rows have no payer, so everyone
+            covered their own.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function StatTile({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
     <div className="rounded-xl bg-white/3 border border-white/5 p-2.5">
@@ -981,6 +1356,8 @@ function BudgetResults({ result }: { result: BudgetResult }) {
           </p>
         )}
       </div>
+
+      <TripPacing result={result} />
 
       {/* Donut + per-category meters */}
       <div className="glass rounded-2xl p-4">
@@ -1079,6 +1456,8 @@ function BudgetResults({ result }: { result: BudgetResult }) {
           <Row label="Remaining on USD/Forex card" value={`${formatUSD(cc.usd_forex_remaining_usd)} (${formatINR(cc.usd_forex_remaining_inr)})`} />
         </div>
       </div>
+
+      {result.settlement && <SettleUp settlement={result.settlement} />}
     </motion.div>
   );
 }
@@ -1117,7 +1496,7 @@ function Row({ label, value, sub }: { label: string; value: string; sub?: boolea
 // ─── Flight case block (one week of flight prices + dates) ────────────────────
 
 function FlightCaseBlock({
-  control, register, watch, name, labelField, accent, badge, onCopyRoutes,
+  control, register, watch, name, labelField, accent, badge, onCopyRoutes, members = [],
 }: {
   control: Control<FormValues>;
   register: UseFormRegister<FormValues>;
@@ -1127,6 +1506,7 @@ function FlightCaseBlock({
   accent: "emerald" | "indigo";
   badge: string;
   onCopyRoutes?: () => void;
+  members?: string[];
 }) {
   const fa = useFieldArray({ control, name });
   const legs = watch(name) ?? [];
@@ -1179,6 +1559,7 @@ function FlightCaseBlock({
               <input type="number" inputMode="decimal" className="input-dark"
                 {...register(`${name}.${i}.price_inr` as const, { valueAsNumber: true })} />
             </Field>
+            <PaidByField members={members} {...register(`${name}.${i}.paid_by` as const)} />
             <button type="button" onClick={() => fa.remove(i)} className="mb-0.5 text-red-400/60 hover:text-red-400">
               <Trash2 className="w-4 h-4" />
             </button>

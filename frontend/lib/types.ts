@@ -10,12 +10,15 @@ export interface FlightCost {
   price_inr: number;
   per_person: boolean;
   date?: string;
+  /** Group mode: which party member fronted this. Blank = everyone paid their own. */
+  paid_by?: string;
 }
 
 export interface AccommodationCost {
   destination: string;
   total_cost_inr: number;
   split_type: "individual" | "group";
+  paid_by?: string;
 }
 
 export interface ItemCost {
@@ -24,6 +27,7 @@ export interface ItemCost {
   amount: number;
   currency: string;
   prepaid?: boolean;
+  paid_by?: string;
 }
 
 export interface CashConversion {
@@ -40,6 +44,13 @@ export interface BudgetInput {
   extras: ItemCost[];
   pocket_money_usd: number;
   cash_conversions: CashConversion[];
+  /** Trip length. Dates win when both are set and sane; `nights` is the fallback. */
+  start_date?: string;
+  end_date?: string;
+  nights?: number;
+  budget_target_inr?: number;
+  /** Names on the trip. Two or more turns on the settle-up ledger. */
+  party?: string[];
 }
 
 export interface BudgetResult {
@@ -70,7 +81,62 @@ export interface BudgetResult {
     prepaid_inr: number;
     pocket_money_inr: number;
   };
+  trip: TripPacing;
+  /** Null unless a target was set. */
+  target: BudgetTarget | null;
+  /** Null for solo trips and parties of one. */
+  settlement: Settlement | null;
   rates_used: Record<string, number>;
+}
+
+export interface BurnDownPoint {
+  day: number;
+  label: string;
+  cumulative_inr: number;
+  cash_left_inr: number;
+  target_left_inr?: number;
+}
+
+export interface TripPacing {
+  nights: number;
+  /** nights + 1, since a 5-night trip spends money on 6 days. 0 when unknown. */
+  days: number;
+  start_date: string;
+  end_date: string;
+  per_day_all_in_inr: number;
+  per_day_on_ground_inr: number;
+  per_day_free_inr: number;
+  per_night_stay_inr: number;
+  burn_down: BurnDownPoint[];
+}
+
+export interface BudgetTarget {
+  amount_inr: number;
+  /** Positive means over the target. */
+  delta_inr: number;
+  pct_used: number;
+  status: "over" | "under";
+  per_day_inr: number;
+  daily_delta_pct: number;
+  /** The day the running total passes the target, or null if it never does. */
+  crossover_day: number | null;
+}
+
+export interface SettlementMember {
+  name: string;
+  paid_inr: number;
+  share_inr: number;
+  /** paid − share. Positive means the party owes them. */
+  net_inr: number;
+}
+
+export interface Settlement {
+  party_size: number;
+  members: SettlementMember[];
+  transfers: { from: string; to: string; amount_inr: number }[];
+  group_total_inr: number;
+  /** Costs nobody fronted — everyone paid their own way. */
+  unattributed_inr: number;
 }
 
 export interface FlightItem {
