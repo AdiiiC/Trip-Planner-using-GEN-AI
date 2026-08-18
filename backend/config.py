@@ -28,7 +28,6 @@ class Settings(BaseSettings):
     # ── Infra ─────────────────────────────────────────────────────────────────
     redis_url: str = Field(default="", alias="REDIS_URL")
     sentry_dsn: str = Field(default="", alias="SENTRY_DSN_BACKEND")
-    hcaptcha_secret: str = Field(default="", alias="HCAPTCHA_SECRET_KEY")
     allowed_origins: str = Field(default="", alias="ALLOWED_ORIGINS")
     rapidapi_key: str = Field(default="", alias="RAPIDAPI_KEY")
     debug: bool = Field(default=False, alias="DEBUG")

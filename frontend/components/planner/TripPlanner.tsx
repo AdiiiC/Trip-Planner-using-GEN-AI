@@ -27,7 +27,6 @@ import { QRCodeButton } from "@/components/ui/QRCodeButton";
 import { CalendarExportButton } from "@/components/ui/CalendarExport";
 import Image from "next/image";
 import dynamic from "next/dynamic";
-import HCaptcha from "@hcaptcha/react-hcaptcha";
 import {
   DndContext, closestCenter, KeyboardSensor, PointerSensor,
   useSensor, useSensors, DragEndEvent,
@@ -431,11 +430,6 @@ export function TripPlanner() {
   // Ref for back-to-top scroll detection
   const outputRef = useRef<HTMLDivElement>(null);
 
-  // hCaptcha ref — only active when NEXT_PUBLIC_HCAPTCHA_SITE_KEY is set
-  const hcaptchaRef = useRef<HCaptcha>(null);
-  const [captchaToken, setCaptchaToken] = useState<string>("");
-  const HCAPTCHA_KEY = process.env.NEXT_PUBLIC_HCAPTCHA_SITE_KEY ?? "";
-
   // DnD sensors for multi-city drag reorder
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -542,14 +536,6 @@ export function TripPlanner() {
     );
   }
 
-  async function freshCaptchaToken(): Promise<string | undefined> {
-    if (!HCAPTCHA_KEY) return undefined;
-    if (!hcaptchaRef.current) throw new Error("Captcha is still loading. Please try again.");
-    const { response } = await hcaptchaRef.current.execute({ async: true });
-    setCaptchaToken(response);
-    hcaptchaRef.current.resetCaptcha();
-    return response;
-  }
   // ── multi-city drag reorder ──────────────────────────────────────────────
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -561,17 +547,11 @@ export function TripPlanner() {
     }
   };
   // ── single submit ────────────────────────────────────────────────────────
-  const onSingleSubmit = async (v: SingleForm) => {
+  const onSingleSubmit = (v: SingleForm) => {
     addRecentCity(v.city);
     const interests = v.interests.split(",").map(s => s.trim()).filter(Boolean);
     if (mode === "plan") {
-      try {
-        const token = captchaToken || await freshCaptchaToken();
-        setCaptchaToken("");
-        startStream((oc, od, oe) => api.planTrip({ city: v.city, days: v.days, interests, budget: v.budget, travel_style: v.travel_style, dietary: v.dietary, travel_date: v.travel_date, currency: v.currency }, oc, od, oe, token));
-      } catch (error) {
-        setError(error instanceof Error ? error.message : "Captcha verification could not start.");
-      }
+      startStream((oc, od, oe) => api.planTrip({ city: v.city, days: v.days, interests, budget: v.budget, travel_style: v.travel_style, dietary: v.dietary, travel_date: v.travel_date, currency: v.currency }, oc, od, oe));
     } else if (mode === "packing") {
       startStream((oc, od, oe) => api.packingList({ city: v.city, days: v.days, travel_style: v.travel_style, interests, travel_date: v.travel_date }, oc, od, oe));
     } else if (mode === "visa") {
@@ -580,22 +560,14 @@ export function TripPlanner() {
   };
 
   // ── multi-city submit ────────────────────────────────────────────────────
-  const onMultiSubmit = async (v: MultiForm) => {
+  const onMultiSubmit = (v: MultiForm) => {
     v.stops.forEach(s => addRecentCity(s.city));
-    let token: string | undefined;
-    try {
-      token = captchaToken || await freshCaptchaToken();
-      setCaptchaToken("");
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Captcha verification could not start.");
-      return;
-    }
     startStream((oc, od, oe) => api.multiCityPlan({
       stops: v.stops,
       interests: v.interests.split(",").map(s => s.trim()).filter(Boolean),
       budget: v.budget, travel_style: v.travel_style,
       dietary: v.dietary, currency: v.currency,
-    }, oc, od, oe, token));
+    }, oc, od, oe));
   };
 
   // ── insurance submit ─────────────────────────────────────────────────────
@@ -603,15 +575,9 @@ export function TripPlanner() {
     startStream((oc, od, oe) => api.estimateInsurance(v, oc, od, oe));
   };
 
-  const handleRefine = async () => {
+  const handleRefine = () => {
     if (!output || !feedback.trim()) return;
-    try {
-      const token = captchaToken || await freshCaptchaToken();
-      setCaptchaToken("");
-      startStream((oc, od, oe) => api.refineTrip({ itinerary: output, feedback }, oc, od, oe, token));
-    } catch (error) {
-      setError(error instanceof Error ? error.message : "Captcha verification could not start.");
-    }
+    startStream((oc, od, oe) => api.refineTrip({ itinerary: output, feedback }, oc, od, oe));
     setFeedback("");
   };
 
@@ -829,17 +795,6 @@ export function TripPlanner() {
               </div>
               {sharedFormFields(register)}
 
-              {/* hCaptcha — only rendered when NEXT_PUBLIC_HCAPTCHA_SITE_KEY is set */}
-              {HCAPTCHA_KEY && (
-                <HCaptcha
-                  ref={hcaptchaRef}
-                  sitekey={HCAPTCHA_KEY}
-                  size="invisible"
-                  onVerify={(token) => setCaptchaToken(token)}
-                  onExpire={() => setCaptchaToken("")}
-                />
-              )}
-
               {/* Streaming progress bar */}
               {streaming && mode === "plan" && (
                 <div className="space-y-1 no-print">
@@ -1031,11 +986,9 @@ export function TripPlanner() {
                   <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-400 text-sm">
                     {error}
                     <p className="mt-1 text-xs opacity-70">
-                      {error.toLowerCase().includes("captcha")
-                        ? "Captcha could not be verified. Wait a moment and generate again."
-                        : error.toLowerCase().includes("fetch") || error.includes("HTTP 5")
-                          ? "The planning service is unavailable. Please try again shortly."
-                          : "Review the form and try again."}
+                      {error.toLowerCase().includes("fetch") || error.includes("HTTP 5")
+                        ? "The planning service is unavailable. Please try again shortly."
+                        : "Review the form and try again."}
                     </p>
                   </div>
                 )}
