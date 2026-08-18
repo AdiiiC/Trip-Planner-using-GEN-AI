@@ -12,6 +12,15 @@ class WeatherInput(BaseModel):
     date: str = Field(default="", max_length=10)
 
 
+def _clean_text(value: object) -> str:
+    text = str(value or "")
+    try:
+        repaired = text.encode("latin1").decode("utf-8")
+        return repaired if repaired else text
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        return text
+
+
 async def get_weather(inp: WeatherInput) -> dict:
     city_slug = inp.city.replace(" ", "+")
     url = f"https://wttr.in/{city_slug}?format=j1"
@@ -26,7 +35,7 @@ async def get_weather(inp: WeatherInput) -> dict:
 
     # Extract current conditions
     current = raw.get("current_condition", [{}])[0]
-    weather_desc = current.get("weatherDesc", [{}])[0].get("value", "")
+    weather_desc = _clean_text(current.get("weatherDesc", [{}])[0].get("value", ""))
 
     current_data = {
         "temp_c":       int(current.get("temp_C", 0)),
@@ -41,7 +50,7 @@ async def get_weather(inp: WeatherInput) -> dict:
     # 3-day forecast
     forecast = []
     for day in raw.get("weather", [])[:3]:
-        desc = day.get("hourly", [{}])[4].get("weatherDesc", [{}])[0].get("value", "")
+        desc = _clean_text(day.get("hourly", [{}])[4].get("weatherDesc", [{}])[0].get("value", ""))
         forecast.append({
             "date":      day.get("date", ""),
             "max_c":     int(day.get("maxtempC", 0)),
@@ -52,8 +61,10 @@ async def get_weather(inp: WeatherInput) -> dict:
         })
 
     nearest = raw.get("nearest_area", [{}])[0]
-    resolved_city = nearest.get("areaName", [{}])[0].get("value", inp.city)
-    country = nearest.get("country", [{}])[0].get("value", "")
+    resolved_city = inp.city.split(",", 1)[0].strip()
+    if not resolved_city:
+        resolved_city = _clean_text(nearest.get("areaName", [{}])[0].get("value", inp.city))
+    country = _clean_text(nearest.get("country", [{}])[0].get("value", ""))
 
     return {
         "city":     resolved_city,

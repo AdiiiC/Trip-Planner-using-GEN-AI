@@ -96,7 +96,10 @@ async function consumeSSE(
       headers: { "Content-Type": "application/json", ...extraHeaders },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) {
+      const error = await res.json().catch(() => ({ detail: `HTTP ${res.status}` }));
+      throw new Error(error.detail ?? `HTTP ${res.status}`);
+    }
     if (!res.body) throw new Error("No response body");
 
     const reader = res.body.getReader();
@@ -147,8 +150,10 @@ export const api = {
     body: RefineInput,
     onChunk: (t: string) => void,
     onDone: () => void,
-    onError: (e: Error) => void
-  ) => consumeSSE("/api/refine", body, onChunk, onDone, onError),
+    onError: (e: Error) => void,
+    captchaToken?: string
+  ) => consumeSSE("/api/refine", body, onChunk, onDone, onError,
+    captchaToken ? { "X-Captcha-Token": captchaToken } : undefined),
 
   packingList: (
     body: PackingInput,

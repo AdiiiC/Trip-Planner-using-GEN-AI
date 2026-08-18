@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { useForm, useFieldArray, Controller, useWatch, type Control } from "react-hook-form";
+import { useForm, useFieldArray, useWatch, type Control } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
@@ -21,7 +21,6 @@ import remarkGfm from "remark-gfm";
 import confetti from "canvas-confetti";
 import { CityAutocomplete } from "@/components/ui/CityAutocomplete";
 import { CityHero } from "@/components/ui/CityHero";
-import { DatePicker } from "@/components/ui/DatePicker";
 import { BackToTop } from "@/components/ui/BackToTop";
 import { toast } from "sonner";
 import { QRCodeButton } from "@/components/ui/QRCodeButton";
@@ -463,7 +462,7 @@ export function TripPlanner() {
   }, [mode]);
 
   // ── single-city form ─────────────────────────────────────────────────────
-  const { register, handleSubmit, setValue, watch, control, formState: { errors } } = useForm<SingleForm>({
+  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<SingleForm>({
     resolver: zodResolver(singleSchema),
     defaultValues: {
       city: "", days: 3,
@@ -542,6 +541,15 @@ export function TripPlanner() {
       (e) => { setError(e.message); setStreaming(false); }
     );
   }
+
+  async function freshCaptchaToken(): Promise<string | undefined> {
+    if (!HCAPTCHA_KEY) return undefined;
+    if (!hcaptchaRef.current) throw new Error("Captcha is still loading. Please try again.");
+    const { response } = await hcaptchaRef.current.execute({ async: true });
+    setCaptchaToken(response);
+    hcaptchaRef.current.resetCaptcha();
+    return response;
+  }
   // ── multi-city drag reorder ──────────────────────────────────────────────
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -553,11 +561,17 @@ export function TripPlanner() {
     }
   };
   // ── single submit ────────────────────────────────────────────────────────
-  const onSingleSubmit = (v: SingleForm) => {
+  const onSingleSubmit = async (v: SingleForm) => {
     addRecentCity(v.city);
     const interests = v.interests.split(",").map(s => s.trim()).filter(Boolean);
     if (mode === "plan") {
-      startStream((oc, od, oe) => api.planTrip({ city: v.city, days: v.days, interests, budget: v.budget, travel_style: v.travel_style, dietary: v.dietary, travel_date: v.travel_date, currency: v.currency }, oc, od, oe, captchaToken || undefined));
+      try {
+        const token = captchaToken || await freshCaptchaToken();
+        setCaptchaToken("");
+        startStream((oc, od, oe) => api.planTrip({ city: v.city, days: v.days, interests, budget: v.budget, travel_style: v.travel_style, dietary: v.dietary, travel_date: v.travel_date, currency: v.currency }, oc, od, oe, token));
+      } catch (error) {
+        setError(error instanceof Error ? error.message : "Captcha verification could not start.");
+      }
     } else if (mode === "packing") {
       startStream((oc, od, oe) => api.packingList({ city: v.city, days: v.days, travel_style: v.travel_style, interests, travel_date: v.travel_date }, oc, od, oe));
     } else if (mode === "visa") {
@@ -566,14 +580,22 @@ export function TripPlanner() {
   };
 
   // ── multi-city submit ────────────────────────────────────────────────────
-  const onMultiSubmit = (v: MultiForm) => {
+  const onMultiSubmit = async (v: MultiForm) => {
     v.stops.forEach(s => addRecentCity(s.city));
+    let token: string | undefined;
+    try {
+      token = captchaToken || await freshCaptchaToken();
+      setCaptchaToken("");
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Captcha verification could not start.");
+      return;
+    }
     startStream((oc, od, oe) => api.multiCityPlan({
       stops: v.stops,
       interests: v.interests.split(",").map(s => s.trim()).filter(Boolean),
       budget: v.budget, travel_style: v.travel_style,
       dietary: v.dietary, currency: v.currency,
-    }, oc, od, oe));
+    }, oc, od, oe, token));
   };
 
   // ── insurance submit ─────────────────────────────────────────────────────
@@ -581,9 +603,15 @@ export function TripPlanner() {
     startStream((oc, od, oe) => api.estimateInsurance(v, oc, od, oe));
   };
 
-  const handleRefine = () => {
+  const handleRefine = async () => {
     if (!output || !feedback.trim()) return;
-    startStream((oc, od, oe) => api.refineTrip({ itinerary: output, feedback }, oc, od, oe));
+    try {
+      const token = captchaToken || await freshCaptchaToken();
+      setCaptchaToken("");
+      startStream((oc, od, oe) => api.refineTrip({ itinerary: output, feedback }, oc, od, oe, token));
+    } catch (error) {
+      setError(error instanceof Error ? error.message : "Captcha verification could not start.");
+    }
     setFeedback("");
   };
 
@@ -791,21 +819,8 @@ export function TripPlanner() {
                 </div>
                 <div>
                   <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Travel Date</label>
-                  <Controller
-                    control={control}
-                    name="travel_date"
-                    render={({ field }) => (
-                      <DatePicker
-                        value={field.value ? new Date(field.value) : undefined}
-                        onChange={(d) =>
-                          field.onChange(d ? d.toISOString().slice(0, 10) : "")
-                        }
-                        minDate={new Date()}
-                        placeholder="Pick a date"
-                        data-testid="single-travel-date"
-                      />
-                    )}
-                  />
+                  <input type="date" min={today} className="input-dark h-9"
+                    data-testid="single-travel-date" {...register("travel_date")} />
                 </div>
               </div>
               <div>
@@ -884,22 +899,8 @@ export function TripPlanner() {
                   </div>
                   <div>
                     <label className="text-[10px] text-[var(--fg-muted)] mb-0.5 block">Arrival date</label>
-                    <Controller
-                      control={multiForm.control}
-                      name={`stops.${i}.date`}
-                      render={({ field }) => (
-                        <DatePicker
-                          compact
-                          value={field.value ? new Date(field.value) : undefined}
-                          onChange={(d) =>
-                            field.onChange(d ? d.toISOString().slice(0, 10) : "")
-                          }
-                          minDate={new Date()}
-                          placeholder="Arrival date"
-                          data-testid={`multi-stop-date-${i}`}
-                        />
-                      )}
-                    />
+                    <input type="date" min={today} className="input-dark h-8 text-xs"
+                      data-testid={`multi-stop-date-${i}`} {...multiForm.register(`stops.${i}.date`)} />
                   </div>
                   <div>
                     <label className="text-[10px] text-[var(--fg-muted)] mb-0.5 block">Notes (optional)</label>
@@ -1029,7 +1030,13 @@ export function TripPlanner() {
                 {error && (
                   <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-4 text-red-400 text-sm">
                     {error}
-                    <p className="mt-1 text-xs opacity-70">Make sure the backend is running: <code>uvicorn main:app --reload</code></p>
+                    <p className="mt-1 text-xs opacity-70">
+                      {error.toLowerCase().includes("captcha")
+                        ? "Captcha could not be verified. Wait a moment and generate again."
+                        : error.toLowerCase().includes("fetch") || error.includes("HTTP 5")
+                          ? "The planning service is unavailable. Please try again shortly."
+                          : "Review the form and try again."}
+                    </p>
                   </div>
                 )}
                 {!output && !streaming && !error && (

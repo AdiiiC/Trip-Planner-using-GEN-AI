@@ -1,17 +1,20 @@
 import { withSentryConfig } from "@sentry/nextjs";
 import type { NextConfig } from "next";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const isDev = process.env.NODE_ENV !== "production";
+const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 // Content Security Policy — strict in prod, relaxed for dev (Turbopack HMR, cross-origin preview)
 const prodCsp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://hcaptcha.com https://*.hcaptcha.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://upload.wikimedia.org https://commons.wikimedia.org https://logo.clearbit.com https://images.unsplash.com https://source.unsplash.com",
-  "connect-src 'self' https://*.onrender.com https://*.sentry.io https://wft-geo-db.p.rapidapi.com https://photon.komoot.io https://en.wikipedia.org https://app.posthog.com https://us.i.posthog.com",
+  "connect-src 'self' https://*.onrender.com https://*.sentry.io https://wft-geo-db.p.rapidapi.com https://photon.komoot.io https://en.wikipedia.org https://app.posthog.com https://us.i.posthog.com https://hcaptcha.com https://*.hcaptcha.com",
   "font-src 'self' data:",
-  "frame-src 'none'",
+  "frame-src https://hcaptcha.com https://*.hcaptcha.com",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -19,18 +22,19 @@ const prodCsp = [
 
 const devCsp = [
   "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: ws: wss: https: http:",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://hcaptcha.com https://*.hcaptcha.com",
   "connect-src 'self' ws: wss: https: http:",
   "img-src 'self' data: blob: https: http:",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
-  "frame-src 'none'",
+  "frame-src https://hcaptcha.com https://*.hcaptcha.com",
   "object-src 'none'",
 ].join("; ");
 
 const cspHeader = isDev ? devCsp : prodCsp;
 
 const nextConfig: NextConfig = {
+  turbopack: { root: projectRoot },
   // Broad match to allow Next dev cross-origin requests from any preview cluster
   allowedDevOrigins: [
     "*.preview.emergentagent.com",

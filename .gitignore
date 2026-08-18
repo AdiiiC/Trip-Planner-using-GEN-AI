@@ -40,5 +40,9 @@ credentials.json
 *.key
 .credentials
 
+# Keep sanitized environment templates versioned.
+!backend/.env.example
+!frontend/.env.example
+
 # Local SQLite dev database
 *.db
