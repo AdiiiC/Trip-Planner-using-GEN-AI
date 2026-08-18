@@ -175,8 +175,13 @@ def _safe_error(exc: Exception, context: str = "") -> str:
 
 def _sse(stream: AsyncIterator[str]) -> StreamingResponse:
     async def _gen():
-        async for chunk in stream:
-            payload = json.dumps({"content": chunk})
+        try:
+            async for chunk in stream:
+                payload = json.dumps({"content": chunk})
+                yield f"data: {payload}\n\n"
+        except Exception as exc:
+            logger.error("streaming endpoint failed: %s", exc, exc_info=True)
+            payload = json.dumps({"error": "The AI provider is unavailable. Please try again shortly."})
             yield f"data: {payload}\n\n"
         yield "data: [DONE]\n\n"
 

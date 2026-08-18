@@ -8,7 +8,7 @@ from typing import AsyncIterator
 from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 
-from agents.llm import get_llm
+from agents.llm import astream_with_fallback
 
 
 class InsuranceInput(BaseModel):
@@ -39,12 +39,7 @@ _prompt = ChatPromptTemplate.from_messages([
 ])
 
 
-def _llm():
-    return get_llm(temperature=0.3)
-
-
 async def estimate_insurance(inp: InsuranceInput) -> AsyncIterator[str]:
-    llm = _llm()
     msgs = _prompt.format_messages(
         destination=inp.destination,
         trip_cost_usd=inp.trip_cost_usd,
@@ -52,7 +47,5 @@ async def estimate_insurance(inp: InsuranceInput) -> AsyncIterator[str]:
         travelers=inp.travelers,
         traveler_age=inp.traveler_age,
     )
-    async for chunk in llm.astream(msgs):
-        text = chunk.content or ""
-        if text:
-            yield text
+    async for text in astream_with_fallback(msgs):
+        yield text

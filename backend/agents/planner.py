@@ -7,7 +7,7 @@ from typing import AsyncIterator
 from pydantic import BaseModel, Field, field_validator
 from langchain_core.prompts import ChatPromptTemplate
 
-from agents.llm import get_llm
+from agents.llm import astream_with_fallback
 
 
 SYSTEM_PROMPT = (
@@ -56,10 +56,6 @@ _visa_prompt = ChatPromptTemplate.from_messages([
      "Include: visa type, cost, processing time, required documents, and any on-arrival options. "
      "Format as Markdown. Add a disclaimer to verify with the official embassy."),
 ])
-
-
-def _llm():
-    return get_llm(temperature=0.3)
 
 
 class PlanInput(BaseModel):
@@ -127,7 +123,6 @@ class VisaInput(BaseModel):
 
 
 async def generate_itinerary(inp: PlanInput) -> AsyncIterator[str]:
-    llm = _llm()
     msgs = _itinerary_prompt.format_messages(
         city=inp.city,
         days=inp.days,
@@ -138,23 +133,17 @@ async def generate_itinerary(inp: PlanInput) -> AsyncIterator[str]:
         dietary=inp.dietary,
         currency=inp.currency,
     )
-    async for chunk in llm.astream(msgs):
-        text = chunk.content or ""
-        if text:
-            yield text
+    async for text in astream_with_fallback(msgs):
+        yield text
 
 
 async def refine_itinerary(inp: RefineInput) -> AsyncIterator[str]:
-    llm = _llm()
     msgs = _refine_prompt.format_messages(itinerary=inp.itinerary, feedback=inp.feedback)
-    async for chunk in llm.astream(msgs):
-        text = chunk.content or ""
-        if text:
-            yield text
+    async for text in astream_with_fallback(msgs):
+        yield text
 
 
 async def generate_packing_list(inp: PackingInput) -> AsyncIterator[str]:
-    llm = _llm()
     from datetime import datetime
     try:
         month = datetime.fromisoformat(inp.travel_date).strftime("%B")
@@ -167,19 +156,14 @@ async def generate_packing_list(inp: PackingInput) -> AsyncIterator[str]:
         travel_style=inp.travel_style,
         interests=", ".join(inp.interests) if inp.interests else "general sightseeing",
     )
-    async for chunk in llm.astream(msgs):
-        text = chunk.content or ""
-        if text:
-            yield text
+    async for text in astream_with_fallback(msgs):
+        yield text
 
 
 async def get_visa_info(inp: VisaInput) -> AsyncIterator[str]:
-    llm = _llm()
     msgs = _visa_prompt.format_messages(destination=inp.destination)
-    async for chunk in llm.astream(msgs):
-        text = chunk.content or ""
-        if text:
-            yield text
+    async for text in astream_with_fallback(msgs):
+        yield text
 
 
 # ── Multi-city ────────────────────────────────────────────────────────────────
@@ -226,7 +210,6 @@ _multi_prompt = ChatPromptTemplate.from_messages([
 
 
 async def generate_multi_city(inp: MultiCityInput) -> AsyncIterator[str]:
-    llm = _llm()
     stops_text = "\n".join(
         f"  {i+1}. {s.city} — {s.days} day(s), arriving {s.date}"
         + (f" [Note: {s.notes}]" if s.notes else "")
@@ -240,7 +223,5 @@ async def generate_multi_city(inp: MultiCityInput) -> AsyncIterator[str]:
         dietary=inp.dietary,
         currency=inp.currency,
     )
-    async for chunk in llm.astream(msgs):
-        text = chunk.content or ""
-        if text:
-            yield text
+    async for text in astream_with_fallback(msgs):
+        yield text

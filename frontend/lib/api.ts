@@ -113,11 +113,14 @@ async function consumeSSE(
         const payload = line.slice(6).trim();
         if (payload === "[DONE]") break;
         try {
-          const { content } = JSON.parse(payload);
+          const { content, error } = JSON.parse(payload);
+          if (error) throw new Error(error);
           accumulated += content;
           onChunk(accumulated);
-        } catch {
-          // skip malformed lines
+        } catch (error) {
+          if (error instanceof Error && !error.message.startsWith("Unexpected")) {
+            throw error;
+          }
         }
       }
     }

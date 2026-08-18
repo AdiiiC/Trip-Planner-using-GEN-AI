@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # ── LLM providers ─────────────────────────────────────────────────────────
     groq_api_key: str = Field(default="", alias="GROQ_API_KEY")
     openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
-    primary_model: str = Field(default="llama-3.3-70b-versatile", alias="PRIMARY_MODEL")
+    primary_model: str = Field(default="openai/gpt-oss-20b", alias="PRIMARY_MODEL")
     fallback_model: str = Field(default="meta-llama/llama-3.3-70b-instruct", alias="FALLBACK_MODEL")
 
     # ── Search providers ──────────────────────────────────────────────────────

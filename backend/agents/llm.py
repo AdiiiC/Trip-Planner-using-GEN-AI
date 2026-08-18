@@ -8,6 +8,7 @@ transparently retries on the fallback provider (OpenRouter) when configured.
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncIterator
 from typing import Any
 
 from langchain_core.messages import BaseMessage
@@ -16,6 +17,19 @@ from langchain_groq import ChatGroq
 from config import settings
 
 log = logging.getLogger("llm")
+
+_RETIRED_GROQ_MODELS = {
+    "llama-3.3-70b-versatile": "openai/gpt-oss-20b",
+}
+
+
+def primary_model_name() -> str:
+    """Replace known retired Groq model IDs even when an old env value remains."""
+    replacement = _RETIRED_GROQ_MODELS.get(settings.primary_model)
+    if replacement:
+        log.warning("Groq model %s is retired; using %s", settings.primary_model, replacement)
+        return replacement
+    return settings.primary_model
 
 
 def get_llm(
@@ -31,7 +45,7 @@ def get_llm(
         kwargs["model_kwargs"] = {"response_format": {"type": "json_object"}}
     return ChatGroq(
         temperature=temperature,
-        model_name=settings.primary_model,
+        model_name=primary_model_name(),
         max_retries=max_retries,
         timeout=timeout,
         api_key=settings.groq_api_key or None,
@@ -78,3 +92,37 @@ async def ainvoke_with_fallback(
         if fallback is None:
             raise
         return await fallback.ainvoke(messages)
+
+
+async def astream_with_fallback(
+    messages: list[BaseMessage],
+    *,
+    temperature: float = 0.3,
+    timeout: int = 60,
+) -> AsyncIterator[str]:
+    """Stream from Groq, switching providers when it fails before output starts."""
+    primary = get_llm(temperature=temperature, timeout=timeout)
+    emitted = False
+    try:
+        async for chunk in primary.astream(messages):
+            text = chunk.content or ""
+            if text:
+                emitted = True
+                yield str(text)
+        return
+    except Exception as exc:  # noqa: BLE001
+        log.warning("Primary LLM stream failed (%s)", exc)
+        if emitted:
+            raise
+
+    fallback = _get_fallback_llm(
+        json_mode=False,
+        temperature=temperature,
+        timeout=timeout,
+    )
+    if fallback is None:
+        raise RuntimeError("No language model is currently available.")
+    async for chunk in fallback.astream(messages):
+        text = chunk.content or ""
+        if text:
+            yield str(text)
