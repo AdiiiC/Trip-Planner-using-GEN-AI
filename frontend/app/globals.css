@@ -195,7 +195,7 @@ body {
 .prose-trip a { color: var(--accent-hover); text-decoration: underline; text-underline-offset: 3px; }
 .prose-trip table {
   width: 100%;
-  min-width: 720px;
+  min-width: 920px;
   table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
@@ -213,7 +213,9 @@ body {
   vertical-align: top;
   border-right: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
+  word-break: normal;
+  hyphens: none;
 }
 .prose-trip th:last-child,
 .prose-trip td:last-child { border-right: 0; }
@@ -226,11 +228,11 @@ body {
 .prose-trip tbody tr:nth-child(even) td {
   background: color-mix(in oklab, var(--surface-2) 45%, transparent);
 }
-.prose-trip th:nth-child(1), .prose-trip td:nth-child(1) { width: 12%; white-space: nowrap; }
-.prose-trip th:nth-child(2), .prose-trip td:nth-child(2) { width: 18%; }
-.prose-trip th:nth-child(3), .prose-trip td:nth-child(3) { width: 27%; }
+.prose-trip th:nth-child(1), .prose-trip td:nth-child(1) { width: 15%; white-space: nowrap; }
+.prose-trip th:nth-child(2), .prose-trip td:nth-child(2) { width: 20%; }
+.prose-trip th:nth-child(3), .prose-trip td:nth-child(3) { width: 24%; }
 .prose-trip th:nth-child(4), .prose-trip td:nth-child(4),
-.prose-trip th:nth-child(5), .prose-trip td:nth-child(5) { width: 10%; }
+.prose-trip th:nth-child(5), .prose-trip td:nth-child(5) { width: 9%; white-space: nowrap; }
 .prose-trip th:nth-child(6), .prose-trip td:nth-child(6) { width: 23%; }
 
 /* ── input compatibility layer ─────────────────────────────────────────── */
