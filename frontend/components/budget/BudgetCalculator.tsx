@@ -5,10 +5,10 @@ import { motion, AnimatePresence } from "framer-motion";
 import { useForm, useFieldArray, type Control, type UseFormRegister, type UseFormWatch } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { PlusCircle, Trash2, Calculator, RefreshCw, ChevronDown, ChevronUp, Info, ShieldCheck, Search, ExternalLink, Calendar, Copy, GitCompareArrows, TrendingDown, Plane, BedDouble, Ticket, Receipt, Wallet, Banknote, TriangleAlert, CalendarDays, Users, ArrowRight, type LucideIcon } from "lucide-react";
+import { PlusCircle, Trash2, Calculator, RefreshCw, ChevronDown, ChevronUp, Info, ShieldCheck, Search, ExternalLink, Calendar, Copy, GitCompareArrows, TrendingDown, Plane, BedDouble, Ticket, Receipt, Wallet, Banknote, TriangleAlert, CalendarDays, type LucideIcon } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api } from "@/lib/api";
-import type { BudgetInput, BudgetResult, BudgetTarget, Settlement, VisaCheckResult } from "@/lib/types";
+import type { BudgetInput, BudgetResult, BudgetTarget, VisaCheckResult } from "@/lib/types";
 import { formatINR, formatUSD, formatNumber, cn } from "@/lib/utils";
 import { setUserRates } from "@/lib/userRates";
 import { BudgetPdfButton } from "@/components/budget/BudgetPdfButton";
@@ -35,7 +35,6 @@ const flightSchema = z.object({
   price_inr: z.number().min(0),
   per_person: z.boolean(),
   date: z.string().optional(),
-  paid_by: z.string().optional(),
 });
 
 const schema = z.object({
@@ -50,10 +49,9 @@ const schema = z.object({
     destination: z.string().min(1),
     total_cost_inr: z.number().min(0),
     split_type: z.enum(["individual", "group"]),
-    paid_by: z.string().optional(),
   })),
-  sightseeing: z.array(z.object({ name: z.string().min(1), destination: z.string(), amount: z.number().min(0), currency: z.string(), paid_by: z.string().optional() })),
-  extras: z.array(z.object({ name: z.string().min(1), destination: z.string(), amount: z.number().min(0), currency: z.string(), prepaid: z.boolean().optional(), paid_by: z.string().optional() })),
+  sightseeing: z.array(z.object({ name: z.string().min(1), destination: z.string(), amount: z.number().min(0), currency: z.string() })),
+  extras: z.array(z.object({ name: z.string().min(1), destination: z.string(), amount: z.number().min(0), currency: z.string(), prepaid: z.boolean().optional() })),
   pocket_money_usd: z.number().min(0),
   cash_conversions: z.array(z.object({ currency: z.string().min(1), amount_inr: z.number().min(0) })),
   // Trip length: a date range, or a night count when the dates aren't fixed yet.
@@ -61,8 +59,6 @@ const schema = z.object({
   end_date: z.string(),
   nights: z.number().min(0).max(365),
   budget_target_inr: z.number().min(0),
-  // Wrapped in objects because useFieldArray can't track bare strings.
-  party: z.array(z.object({ name: z.string() })),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -109,7 +105,6 @@ const DEFAULT_VALUES: FormValues = {
   end_date: "",
   nights: 0,
   budget_target_inr: 0,
-  party: [],
 };
 
 /** Loaded plan values, with anything the payload predates filled in. */
@@ -164,7 +159,6 @@ function toBudgetInput(d: FormValues, legs: FlightLeg[]): BudgetInput {
         price_inr: f.price_inr,
         per_person: f.per_person,
         date: f.date || "",
-        paid_by: f.paid_by || "",
       })),
     accommodations: d.accommodations,
     sightseeing: d.sightseeing,
@@ -175,7 +169,6 @@ function toBudgetInput(d: FormValues, legs: FlightLeg[]): BudgetInput {
     end_date: d.end_date || "",
     nights: d.nights || 0,
     budget_target_inr: d.budget_target_inr || 0,
-    party: d.party.map(p => p.name.trim()).filter(Boolean),
   };
 }
 
@@ -224,19 +217,6 @@ function Field({ children, className }: { children: React.ReactNode; className?:
  * Who fronted this bill. Absent from the DOM entirely outside group mode, so solo
  * planning stays as uncluttered as it was.
  */
-function PaidByField({ members, ...select }: { members: string[] } & React.ComponentProps<"select">) {
-  if (members.length < 2) return null;
-  return (
-    <Field className="w-36">
-      <Label>Paid by</Label>
-      <select className="input-dark" {...select}>
-        <option value="">Each their own</option>
-        {members.map(m => <option key={m} value={m}>{m}</option>)}
-      </select>
-    </Field>
-  );
-}
-
 // ─── main component ───────────────────────────────────────────────────────────
 
 export function BudgetCalculator() {
@@ -266,7 +246,6 @@ export function BudgetCalculator() {
   const sight      = useFieldArray({ control, name: "sightseeing" });
   const xtra       = useFieldArray({ control, name: "extras" });
   const cashConv   = useFieldArray({ control, name: "cash_conversions" });
-  const party      = useFieldArray({ control, name: "party" });
 
   const mutation = useMutation({
     mutationFn: async (data: FormValues) => {
@@ -327,12 +306,6 @@ export function BudgetCalculator() {
     setValue("start_date", dates[0]);
     setValue("end_date", dates[dates.length - 1]);
   }, [watch, setValue]);
-
-  // ── Group mode ──
-  const partyNames = watch("party").map(p => p.name.trim()).filter(Boolean);
-  const groupMode = partyNames.length >= 2;
-  const travelers = watch("travelers");
-  const partyMismatch = partyNames.length > 0 && partyNames.length !== travelers;
 
   // Add visa cost to extras list
   const addVisaToBudget = useCallback((name: string, amount: number, currency: string) => {
@@ -492,49 +465,6 @@ export function BudgetCalculator() {
               </p>
             </SectionCard>
 
-            {/* Group trip */}
-            <SectionCard title="Group Trip & Settle-up" defaultOpen={false}>
-              <p className="text-xs text-[var(--fg-muted)] flex items-center gap-1 mb-2">
-                <Info className="w-3 h-3" /> Name everyone, then mark who paid each bill — we&apos;ll work out who owes whom
-              </p>
-              <div className="space-y-2">
-                {party.fields.map((f, i) => (
-                  <div key={f.id} className="flex gap-2 items-end">
-                    <Field className="flex-1">
-                      <Label>{i === 0 ? "You" : `Traveller ${i + 1}`}</Label>
-                      <input className="input-dark" placeholder="Name or @handle"
-                        {...register(`party.${i}.name`)} />
-                    </Field>
-                    <button type="button" onClick={() => party.remove(i)} aria-label="Remove traveller"
-                      className="mb-0.5 text-red-400/60 hover:text-red-400">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <button type="button" onClick={() => party.append({ name: "" })}
-                className="mt-2 flex items-center gap-1 text-emerald-400 text-sm hover:text-emerald-300">
-                <PlusCircle className="w-4 h-4" /> Add traveller
-              </button>
-
-              {partyMismatch && (
-                <p className="flex items-start gap-1.5 text-[11px] text-amber-300 mt-2">
-                  <TriangleAlert className="w-3.5 h-3.5 shrink-0 mt-px" />
-                  You&apos;ve named {partyNames.length} {partyNames.length === 1 ? "person" : "people"} but
-                  travellers is set to {travelers}.
-                  <button type="button" onClick={() => setValue("travelers", partyNames.length)}
-                    className="underline hover:text-amber-200">
-                    Set it to {partyNames.length}
-                  </button>
-                </p>
-              )}
-              {!groupMode && party.fields.length > 0 && (
-                <p className="text-[10px] text-[var(--fg-muted)]/60 mt-2">
-                  Add a second name to turn on the settle-up ledger.
-                </p>
-              )}
-            </SectionCard>
-
             {/* Exchange Rates */}
             <SectionCard title="Exchange Rates (→ INR)">
               <div className="flex items-center justify-between mb-2">
@@ -596,7 +526,6 @@ export function BudgetCalculator() {
                 labelField="case_a_label"
                 accent="emerald"
                 badge="Case 1"
-                members={partyNames}
               />
 
               <div className="pt-3 mt-3 border-t border-[var(--border)]">
@@ -638,7 +567,6 @@ export function BudgetCalculator() {
                         accent="indigo"
                         badge="Case 2"
                         onCopyRoutes={copyRoutesFromA}
-                        members={partyNames}
                       />
                     </div>
                   </motion.div>
@@ -674,7 +602,6 @@ export function BudgetCalculator() {
                             <option value="individual">Individual</option>
                           </select>
                         </Field>
-                        <PaidByField members={partyNames} {...register(`accommodations.${i}.paid_by`)} />
                         <button type="button" onClick={() => stays.remove(i)} className="mb-0.5 text-red-400/60 hover:text-red-400">
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -780,7 +707,6 @@ export function BudgetCalculator() {
                           {allCurrencies.map(c => <option key={c}>{c}</option>)}
                         </select>
                       </Field>
-                      <PaidByField members={partyNames} {...register(`sightseeing.${i}.paid_by`)} />
                       <button type="button" onClick={() => sight.remove(i)} className="mb-0.5 text-red-400/60 hover:text-red-400">
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -814,7 +740,6 @@ export function BudgetCalculator() {
                         {allCurrencies.map(c => <option key={c}>{c}</option>)}
                       </select>
                     </Field>
-                    <PaidByField members={partyNames} {...register(`extras.${i}.paid_by`)} />
                     <button type="button" onClick={() => xtra.remove(i)} className="mb-0.5 text-red-400/60 hover:text-red-400">
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -1164,71 +1089,6 @@ function TripPacing({ result }: { result: BudgetResult }) {
   );
 }
 
-/** Who fronted what, and the shortest set of transfers that squares everyone up. */
-function SettleUp({ settlement }: { settlement: Settlement }) {
-  const { members, transfers, group_total_inr, unattributed_inr } = settlement;
-  const biggest = Math.max(...members.map(m => Math.abs(m.net_inr)), 1);
-
-  return (
-    <div className="glass rounded-2xl p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm font-medium text-white flex items-center gap-2">
-          <Users className="w-4 h-4 text-amber-400" /> Settle up
-        </p>
-        <span className="text-[11px] text-[var(--fg-muted)]">{formatINR(group_total_inr)} fronted</span>
-      </div>
-
-      <div className="space-y-2">
-        {members.map(m => {
-          const owed = m.net_inr > 0;
-          const color = Math.abs(m.net_inr) < 1 ? "#64748b" : owed ? "#34d399" : "#fb7185";
-          return (
-            <div key={m.name} className="space-y-1">
-              <div className="flex items-baseline gap-2 text-xs">
-                <span className="text-white truncate">{m.name}</span>
-                <span className="text-[10px] text-[var(--fg-muted)] shrink-0">
-                  paid {formatINR(m.paid_inr)} · owes {formatINR(m.share_inr)}
-                </span>
-                <span className="ml-auto font-medium shrink-0" style={{ color }}>
-                  {Math.abs(m.net_inr) < 1
-                    ? "square"
-                    : owed
-                      ? `gets ${formatINR(m.net_inr)}`
-                      : `owes ${formatINR(-m.net_inr)}`}
-                </span>
-              </div>
-              <Meter value={Math.abs(m.net_inr)} total={biggest} color={color} />
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="border-t border-[var(--border)] pt-2 space-y-1.5">
-        {transfers.length === 0 ? (
-          <p className="text-xs text-[var(--fg-muted)]">
-            All square — mark who paid each bill to see who owes whom.
-          </p>
-        ) : (
-          transfers.map((t, i) => (
-            <div key={i} className="flex items-center gap-2 text-xs">
-              <span className="text-white truncate">{t.from}</span>
-              <ArrowRight className="w-3 h-3 text-[var(--fg-muted)] shrink-0" />
-              <span className="text-white truncate">{t.to}</span>
-              <span className="ml-auto font-semibold text-amber-300 shrink-0">{formatINR(t.amount_inr)}</span>
-            </div>
-          ))
-        )}
-        {unattributed_inr > 0 && (
-          <p className="text-[10px] text-[var(--fg-muted)]/70 pt-1">
-            {formatINR(unattributed_inr)} isn&apos;t in the ledger — those rows have no payer, so everyone
-            covered their own.
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}
-
 function StatTile({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
     <div className="rounded-xl bg-white/3 border border-white/5 p-2.5">
@@ -1426,7 +1286,6 @@ function BudgetResults({ result }: { result: BudgetResult }) {
         </div>
       </div>
 
-      {result.settlement && <SettleUp settlement={result.settlement} />}
     </motion.div>
   );
 }
@@ -1465,7 +1324,7 @@ function Row({ label, value, sub }: { label: string; value: string; sub?: boolea
 // ─── Flight case block (one week of flight prices + dates) ────────────────────
 
 function FlightCaseBlock({
-  control, register, watch, name, labelField, accent, badge, onCopyRoutes, members = [],
+  control, register, watch, name, labelField, accent, badge, onCopyRoutes,
 }: {
   control: Control<FormValues>;
   register: UseFormRegister<FormValues>;
@@ -1475,7 +1334,6 @@ function FlightCaseBlock({
   accent: "emerald" | "indigo";
   badge: string;
   onCopyRoutes?: () => void;
-  members?: string[];
 }) {
   const fa = useFieldArray({ control, name });
   const legs = watch(name) ?? [];
@@ -1528,7 +1386,6 @@ function FlightCaseBlock({
               <input type="number" inputMode="decimal" className="input-dark"
                 {...register(`${name}.${i}.price_inr` as const, { valueAsNumber: true })} />
             </Field>
-            <PaidByField members={members} {...register(`${name}.${i}.paid_by` as const)} />
             <button type="button" onClick={() => fa.remove(i)} className="mb-0.5 text-red-400/60 hover:text-red-400">
               <Trash2 className="w-4 h-4" />
             </button>

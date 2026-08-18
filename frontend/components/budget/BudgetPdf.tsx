@@ -63,7 +63,7 @@ function BudgetDoc({ result, title }: { result: BudgetResult; title: string }) {
   const cc = result.cash_conversion;
   const gt = result.grand_total;
   // Absent from results computed by a backend that predates these fields.
-  const { trip, target, settlement } = result;
+  const { trip, target } = result;
   const now = new Date().toLocaleString();
 
   return (
@@ -143,28 +143,6 @@ function BudgetDoc({ result, title }: { result: BudgetResult; title: string }) {
                   <Line l="Running total passes the target on" r={target.crossover_day === 0 ? "departure" : `day ${target.crossover_day}`} />
                 )}
               </>
-            )}
-          </View>
-        )}
-
-        {/* Group ledger */}
-        {settlement && (
-          <View style={s.section} break={settlement.members.length > 8}>
-            <Text style={s.sectionTitle}>4. Settle Up ({settlement.party_size} travellers)</Text>
-            {settlement.members.map((m) => (
-              <Line
-                key={m.name}
-                l={m.name}
-                m={`paid ${inr(m.paid_inr)} · owes ${inr(m.share_inr)}`}
-                r={Math.abs(m.net_inr) < 1 ? "square" : m.net_inr > 0 ? `gets ${inr(m.net_inr)}` : `owes ${inr(-m.net_inr)}`}
-              />
-            ))}
-            {settlement.transfers.length > 0 && <Text style={s.subTitle}>Transfers</Text>}
-            {settlement.transfers.map((t, i) => (
-              <Line key={i} l={`${t.from} → ${t.to}`} r={inr(t.amount_inr)} boldRow />
-            ))}
-            {settlement.unattributed_inr > 0 && (
-              <Line l="Not in the ledger (everyone paid their own)" r={inr(settlement.unattributed_inr)} />
             )}
           </View>
         )}
