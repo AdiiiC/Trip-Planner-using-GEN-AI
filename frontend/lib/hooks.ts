@@ -6,6 +6,7 @@
  */
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
+import { geocodeCities, type GeoCity } from "@/lib/geocode";
 
 export function useForexRates() {
   return useQuery({
@@ -51,6 +52,16 @@ export function useOptimizeRoute() {
   return useMutation({
     mutationFn: (stops: { city: string; lat: number; lng: number }[]) =>
       api.optimizeRoute(stops),
+  });
+}
+
+export function useGeocodedStops(cities: string[]) {
+  const names = cities.map((c) => c.trim()).filter(Boolean);
+  return useQuery<GeoCity[]>({
+    queryKey: ["geocode-stops", names.join("|").toLowerCase()],
+    queryFn: () => geocodeCities(names),
+    enabled: names.length > 0,
+    staleTime: 24 * 60 * 60 * 1000,
   });
 }
 

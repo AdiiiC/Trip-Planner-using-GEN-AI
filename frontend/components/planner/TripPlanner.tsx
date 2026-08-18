@@ -26,6 +26,9 @@ import { toast } from "sonner";
 import { QRCodeButton } from "@/components/ui/QRCodeButton";
 import { CalendarExportButton } from "@/components/ui/CalendarExport";
 import { PlannerPdfButton } from "@/components/planner/PlannerPdfButton";
+import { RouteOptimizer } from "@/components/planner/RouteOptimizer";
+import { CostBreakdown } from "@/components/planner/CostBreakdown";
+import { useGeocodedStops } from "@/lib/hooks";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import {
@@ -240,31 +243,8 @@ const RouteMapDynamic = dynamic(() => import("@/components/ui/RouteMap").then(m 
 
 function MultiCityRouteMap({ control }: { control: Control<MultiForm> }) {
   const stops = useWatch({ control, name: "stops" });
-  const valid = (stops ?? []).filter((s) => s?.city?.trim());
-  const [geoStops, setGeoStops] = useState<Array<{ city: string; lat: number; lng: number }>>([]);
-
-  // Geocode cities via Photon (free, no key)
-  useEffect(() => {
-    if (valid.length < 2) { setGeoStops([]); return; }
-    let cancelled = false;
-    (async () => {
-      const results: Array<{ city: string; lat: number; lng: number }> = [];
-      for (const s of valid) {
-        try {
-          const resp = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(s.city)}&limit=1&lang=en`);
-          const data = await resp.json();
-          const feat = data?.features?.[0];
-          if (feat) {
-            const [lng, lat] = feat.geometry.coordinates;
-            results.push({ city: s.city, lat, lng });
-          }
-        } catch { /* skip failed geocodes */ }
-      }
-      if (!cancelled) setGeoStops(results);
-    })();
-    return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valid.map(s => s.city).join("|")]);
+  const cities = (stops ?? []).map((s) => s?.city ?? "").filter((c) => c.trim());
+  const { data: geoStops = [] } = useGeocodedStops(cities.length >= 2 ? cities : []);
 
   if (geoStops.length < 2) return null;
 
@@ -276,6 +256,15 @@ function MultiCityRouteMap({ control }: { control: Control<MultiForm> }) {
       <RouteMapDynamic stops={geoStops} />
     </motion.div>
   );
+}
+
+function MultiCityRouteOptimizer({
+  control, onApply,
+}: { control: Control<MultiForm>; onApply: (ordered: string[]) => void }) {
+  const stops = useWatch({ control, name: "stops" });
+  const cities = (stops ?? []).map((s) => s?.city ?? "").filter((c) => c.trim());
+  // Keyed so a changed stop list clears any previous suggestion.
+  return <RouteOptimizer key={cities.join("|").toLowerCase()} cities={cities} onApply={onApply} />;
 }
 
 // ─── recently searched hook ───────────────────────────────────────────────────
@@ -447,7 +436,7 @@ export function TripPlanner() {
   const [feedback, setFeedback] = useState("");
   const [copied, setCopied]     = useState(false);
   const [shared, setShared]     = useState(false);
-  const [activeTab, setActiveTab] = useState<"output" | "refine" | "history">("output");
+  const [activeTab, setActiveTab] = useState<"output" | "costs" | "refine" | "history">("output");
 
   // Timer refs — cleared on unmount to prevent setState on unmounted component
   const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -501,6 +490,7 @@ export function TripPlanner() {
   const city     = watch("city");
   const days     = watch("days");
   const travelDate = watch("travel_date");
+  const currency = watch("currency");
 
   // Hydrate from URL query params (landing page wizard deep-link)
   useEffect(() => {
@@ -547,9 +537,11 @@ export function TripPlanner() {
       dietary: "none", currency: "USD",
     },
   });
-  const { fields: stopFields, append, remove: removeStop } = useFieldArray({
+  const { fields: stopFields, append, remove: removeStop, replace: replaceStops } = useFieldArray({
     control: multiForm.control, name: "stops",
   });
+  const multiCurrency = useWatch({ control: multiForm.control, name: "currency" });
+  const costCurrency = mode === "multi" ? multiCurrency : currency;
 
   // ── insurance form ───────────────────────────────────────────────────────
   const insuranceForm = useForm<InsuranceForm>({
@@ -578,6 +570,18 @@ export function TripPlanner() {
       const current = multiForm.getValues("stops");
       multiForm.setValue("stops", arrayMove(current, oldIndex, newIndex));
     }
+  };
+
+  // ── apply an optimised city order to the stop list ───────────────────────
+  const applyRouteOrder = (ordered: string[]) => {
+    const pool = [...multiForm.getValues("stops")];
+    const reordered: CityStop[] = [];
+    for (const name of ordered) {
+      const idx = pool.findIndex(s => s.city.trim().toLowerCase() === name.trim().toLowerCase());
+      if (idx !== -1) reordered.push(...pool.splice(idx, 1));
+    }
+    replaceStops([...reordered, ...pool]);
+    toast.success("Stops reordered for the shortest route");
   };
   // ── single submit ────────────────────────────────────────────────────────
   const onSingleSubmit = (v: SingleForm) => {
@@ -900,6 +904,7 @@ export function TripPlanner() {
                 className="flex items-center gap-1 text-emerald-400 hover:text-emerald-300 text-sm transition-colors">
                 <Plus className="w-4 h-4" /> Add city
               </button>
+              <MultiCityRouteOptimizer control={multiForm.control} onApply={applyRouteOrder} />
               <div>
                 <label className="text-xs font-medium text-[var(--fg-muted)] mb-1 block">Interests</label>
                 <input className="input-dark" placeholder="temples, food, adventure"
@@ -978,7 +983,7 @@ export function TripPlanner() {
         <div className="glass rounded-2xl flex flex-col min-h-[350px] md:min-h-[600px] relative">
           {/* Tab bar */}
           <div className="flex gap-1 p-3 border-b border-[var(--border)] flex-wrap">
-            {(["output", "refine", "history"] as const).map(tab => (
+            {(["output", "costs", "refine", "history"] as const).map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
                 className={cn(
                   "px-3 py-1.5 text-sm font-medium rounded-lg transition-colors capitalize",
@@ -986,7 +991,7 @@ export function TripPlanner() {
                     ? "bg-emerald-600/20 text-emerald-300 border border-emerald-500/30"
                     : "text-[var(--fg-muted)] hover:text-white"
                 )}>
-                {tab === "history" ? `History (${trips.length})` : tab === "output" ? "Output" : "Refine"}
+                {tab === "history" ? `History (${trips.length})` : tab}
               </button>
             ))}
 
@@ -1081,6 +1086,11 @@ export function TripPlanner() {
                   </>
                 )}
               </>
+            )}
+
+            {/* ── Costs tab ── */}
+            {activeTab === "costs" && (
+              <CostBreakdown itinerary={output} currency={costCurrency} />
             )}
 
             {/* ── Refine tab ── */}

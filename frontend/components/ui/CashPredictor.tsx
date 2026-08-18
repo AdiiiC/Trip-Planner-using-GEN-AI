@@ -168,7 +168,7 @@ export function CashPredictor() {
                 value={c.city}
                 onChange={(e) => updateCity(i, "city", e.target.value)}
                 placeholder="City (e.g. Da Nang, Vietnam)"
-                className="input-dark flex-1"
+                className="input-dark flex-1 min-w-0"
               />
               <input
                 type="number"
@@ -176,7 +176,7 @@ export function CashPredictor() {
                 max={90}
                 value={c.days}
                 onChange={(e) => updateCity(i, "days", +e.target.value)}
-                className="input-dark w-16 text-center"
+                className="input-dark basis-16 grow-0 shrink-0 text-center"
               />
               <span className="text-xs text-[#8892b0] shrink-0">days</span>
               {cityInputs.length > 1 && (
