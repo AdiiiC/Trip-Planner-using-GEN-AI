@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
 
 from agents.llm import get_llm
+from agents.geospatial import geocode_attractions
 
 
 class SightseeingInput(BaseModel):
@@ -122,9 +123,10 @@ async def explore_sightseeing(inp: SightseeingInput) -> dict:
     except (json.JSONDecodeError, AttributeError):
         data = {}
 
+    attractions = await geocode_attractions(location, data.get("attractions", []))
     return {
         "city": location,
-        "attractions": data.get("attractions", []),
+        "attractions": attractions,
         "nearby_places": data.get("nearby_places", []),
         "sources": sources,
     }

@@ -18,6 +18,7 @@ from agents.currency import ConvertInput, convert_currency  # noqa: E402
 from agents.route import OptimizeRouteInput, RouteStop, optimize_route  # noqa: E402
 from agents.export import ExportInput, ExportEvent, build_ics  # noqa: E402
 from agents.budget import BudgetInput, calculate_budget  # noqa: E402
+from agents.geospatial import DistanceMatrixInput, GeoPoint, haversine_km  # noqa: E402
 
 client = TestClient(app)
 
@@ -100,6 +101,20 @@ def test_currency_convert_validation_error():
 def test_optimize_route_requires_two_stops():
     r = client.post("/api/optimize-route", json={"stops": [{"city": "X", "lat": 0, "lng": 0}]})
     assert r.status_code == 422
+
+
+def test_haversine_distance_is_geographically_sane():
+    hotel = GeoPoint(name="Hotel", lat=10.7769, lng=106.7009)
+    museum = GeoPoint(name="Museum", lat=10.7792, lng=106.6920)
+    assert 0.8 < haversine_km(hotel, museum) < 1.2
+
+
+def test_distance_matrix_validates_empty_destinations():
+    with pytest.raises(ValueError):
+        DistanceMatrixInput(
+            origin=GeoPoint(name="Hotel", lat=10.77, lng=106.70),
+            destinations=[],
+        )
 
 
 def test_cash_predict_requires_destination():

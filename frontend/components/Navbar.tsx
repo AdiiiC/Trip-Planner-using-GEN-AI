@@ -13,6 +13,7 @@ import {
   Building2,
   UtensilsCrossed,
   StampIcon,
+  ChartNoAxesCombined,
 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
@@ -36,6 +37,7 @@ const primary = [
 ];
 
 const secondary = [
+  { label: "Trip Intelligence", href: "/intelligence", icon: ChartNoAxesCombined },
   { label: "Flights", href: "/flights", icon: Plane },
   { label: "Hotels", href: "/hotels", icon: Building2 },
   { label: "Restaurants", href: "/restaurants", icon: UtensilsCrossed },

@@ -18,6 +18,8 @@ import type {
   VisaInput,
   WeatherInput,
   WeatherResult,
+  GeoPoint,
+  PlaceDistance,
 } from "./types";
 import { authHeader } from "./authToken";
 
@@ -101,7 +103,6 @@ async function consumeSSE(
     const decoder = new TextDecoder();
     let accumulated = "";
 
-    // eslint-disable-next-line no-constant-condition
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -182,6 +183,21 @@ export const api = {
   // ── Cached (10 min sessionStorage TTL) ───────────────────────────────────
   getSightseeing: (city: string, country = "") =>
     postCached<SightseeingResult>("/api/sightseeing", { city, country }),
+
+  searchPlaces: (query: string, city = "") =>
+    postCached<GeoPoint[]>("/api/places/search", { query, city, limit: 6 }),
+
+  reversePlace: (lat: number, lng: number) =>
+    post<GeoPoint>("/api/places/reverse", { lat, lng }),
+
+  placeDistances: (origin: GeoPoint, destinations: GeoPoint[]) =>
+    post<{ origin: GeoPoint; distances: PlaceDistance[] }>("/api/places/distances", {
+      origin,
+      destinations,
+    }),
+
+  intelligence: <T>(kind: "readiness" | "scenarios" | "booking" | "destinations" | "feasibility" | "risk", payload: unknown) =>
+    post<{ kind: string; result: T }>("/api/intelligence", { kind, payload }),
 
   searchFlights: (body: FlightSearchInput) =>
     postCached<FlightSearchResult>("/api/flights", body),

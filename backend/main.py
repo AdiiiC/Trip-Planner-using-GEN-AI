@@ -56,6 +56,15 @@ from agents.export import ExportInput, build_ics
 from agents.best_time import BestTimeInput, best_time_to_visit
 from agents.cash_predict import CashPredictInput, predict_cash
 from agents.attraction_price import AttractionPriceInput, get_attraction_price
+from agents.geospatial import (
+    DistanceMatrixInput,
+    PlaceSearchInput,
+    ReverseGeocodeInput,
+    distance_matrix,
+    reverse_geocode,
+    search_places,
+)
+from agents.travel_intelligence import IntelligenceRequest, analyze
 
 from db import init_db
 from auth_routes import router as auth_router
@@ -271,6 +280,39 @@ async def sightseeing_endpoint(request: Request, body: SightseeingInput):
         return await explore_sightseeing(body)
     except Exception as exc:
         raise HTTPException(status_code=500, detail=_safe_error(exc, "sightseeing"))
+
+
+@app.post("/api/places/search")
+@limiter.limit("60/minute")
+async def places_search_endpoint(request: Request, body: PlaceSearchInput):
+    try:
+        return await search_places(body)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=_safe_error(exc, "place search"))
+
+
+@app.post("/api/places/reverse")
+@limiter.limit("60/minute")
+async def places_reverse_endpoint(request: Request, body: ReverseGeocodeInput):
+    try:
+        return await reverse_geocode(body)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=_safe_error(exc, "reverse geocoding"))
+
+
+@app.post("/api/places/distances")
+@limiter.limit("60/minute")
+async def places_distances_endpoint(request: Request, body: DistanceMatrixInput):
+    return await distance_matrix(body)
+
+
+@app.post("/api/intelligence")
+@limiter.limit("120/minute")
+async def intelligence_endpoint(request: Request, body: IntelligenceRequest):
+    try:
+        return analyze(body)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
 
 
 @app.get("/api/forex")

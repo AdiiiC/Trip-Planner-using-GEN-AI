@@ -190,6 +190,22 @@ export interface Attraction {
   time_needed: string;
   location: string;
   tips: string;
+  coordinates?: GeoPoint;
+}
+
+export interface GeoPoint {
+  name: string;
+  lat: number;
+  lng: number;
+  address: string;
+  kind: string;
+}
+
+export interface PlaceDistance {
+  destination: string;
+  distance_km: number;
+  duration_minutes: number;
+  mode: "driving" | "estimated";
 }
 
 export interface NearbyPlace {

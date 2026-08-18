@@ -10,6 +10,12 @@ import { cn } from "@/lib/utils";
 import { SkeletonCard } from "@/components/ui/skeleton";
 import { CityAutocomplete } from "@/components/ui/CityAutocomplete";
 import { CityHero } from "@/components/ui/CityHero";
+import dynamic from "next/dynamic";
+
+const SightseeingMap = dynamic(
+  () => import("@/components/sightseeing/SightseeingMap").then(module => module.SightseeingMap),
+  { ssr: false }
+);
 
 const CATEGORY_COLORS: Record<string, string> = {
   heritage:    "bg-amber-500/20 text-amber-300 border-amber-500/30",
@@ -27,8 +33,6 @@ const CATEGORY_ICONS: Record<string, string> = {
   heritage: "Heritage", nature: "Nature", food: "Food", adventure: "Adventure", culture: "Culture",
   beach: "Beach", museum: "Museum", "theme-park": "Theme Park", religious: "Religious",
 };
-
-const ALL_CATEGORIES = Object.keys(CATEGORY_COLORS);
 
 export function SightseeingExplorer() {
   const [city, setCity] = useState("");
@@ -147,6 +151,8 @@ export function SightseeingExplorer() {
                 ))}
               </div>
             )}
+
+            <SightseeingMap city={result.city} attractions={result.attractions} />
 
             {/* Attractions grid */}
             <div>
