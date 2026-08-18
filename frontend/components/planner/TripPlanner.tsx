@@ -7,14 +7,14 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import {
   Globe, RefreshCw, Luggage, Shield, Send, Copy, Check,
-  Download, Share2, BookOpen, Plus, Trash2, Cloud,
+  Share2, BookOpen, Plus, Trash2, Cloud,
   Thermometer, Wind, Droplets, PlusCircle, ShieldCheck, Printer,
   ChevronDown, ChevronUp, GripVertical,
 } from "lucide-react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { useTripHistory, buildShareUrl, downloadMarkdown } from "@/lib/tripHistory";
+import { useTripHistory, buildShareUrl } from "@/lib/tripHistory";
 import type { WeatherResult, CityStop } from "@/lib/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -25,6 +25,7 @@ import { BackToTop } from "@/components/ui/BackToTop";
 import { toast } from "sonner";
 import { QRCodeButton } from "@/components/ui/QRCodeButton";
 import { CalendarExportButton } from "@/components/ui/CalendarExport";
+import { PlannerPdfButton } from "@/components/planner/PlannerPdfButton";
 import Image from "next/image";
 import dynamic from "next/dynamic";
 import {
@@ -338,7 +339,13 @@ function MarkdownWithDayCopy({ content }: { content: string }) {
 
   useEffect(() => () => { if (copiedDayTimer.current) clearTimeout(copiedDayTimer.current); }, []);
 
-  const sections = useMemo(() => content.split(/(?=^## Day \d)/m), [content]);
+  const sections = useMemo(() => content.split(/(?=^##\s+Day\s*\d)/m), [content]);
+  const daySections = useMemo(() => sections
+    .map((section, index) => ({
+      index,
+      title: section.match(/^##\s+(Day\s*\d+[^\n]*)/m)?.[1].replace(/\s+/g, " "),
+    }))
+    .filter((item): item is { index: number; title: string } => !!item.title), [sections]);
 
   const copySection = (text: string, idx: number) => {
     navigator.clipboard.writeText(text);
@@ -354,16 +361,42 @@ function MarkdownWithDayCopy({ content }: { content: string }) {
       return next;
     });
 
+  const goToDay = (idx: number) => {
+    setCollapsed(prev => {
+      const next = new Set(prev);
+      next.delete(idx);
+      return next;
+    });
+    requestAnimationFrame(() => document.getElementById(`itinerary-day-${idx}`)?.scrollIntoView({ behavior: "smooth", block: "start" }));
+  };
+
   return (
     <div>
+      {daySections.length > 1 && (
+        <div className="sticky top-0 z-10 -mx-1 mb-4 rounded-lg border border-[var(--border)] bg-[color-mix(in_oklab,_var(--surface)_94%,_transparent)] backdrop-blur-md p-2 no-print">
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-hide">
+            <span className="px-1.5 text-[10px] font-semibold uppercase text-[var(--fg-muted)] shrink-0">{daySections.length} days</span>
+            {daySections.map(day => (
+              <button key={day.index} type="button" onClick={() => goToDay(day.index)}
+                className="shrink-0 rounded-md border border-[var(--border)] bg-[var(--surface-2)] px-2 py-1 text-[11px] text-[var(--fg-muted)] hover:border-emerald-500/40 hover:text-emerald-300">
+                {day.title.match(/^Day\s*\d+/)?.[0].replace(/\s+/g, " ") ?? day.title}
+              </button>
+            ))}
+            <button type="button" onClick={() => setCollapsed(new Set())}
+              className="ml-auto shrink-0 rounded-md px-2 py-1 text-[11px] text-emerald-400 hover:bg-emerald-500/10">
+              Expand all
+            </button>
+          </div>
+        </div>
+      )}
       {sections.map((section, i) => {
-        const isDaySection = /^## Day \d/m.test(section);
+        const isDaySection = /^##\s+Day\s*\d/m.test(section);
         const isCollapsed = collapsed.has(i);
-        const dayTitle = section.match(/^## (Day \d+[^\n]*)/m)?.[1];
+        const dayTitle = section.match(/^##\s+(Day\s*\d+[^\n]*)/m)?.[1].replace(/\s+/g, " ");
 
         if (isDaySection) {
           return (
-            <div key={i} className="relative group/day border border-white/5 rounded-xl mb-3 overflow-hidden">
+            <div id={`itinerary-day-${i}`} key={i} className="relative group/day border border-[var(--border)] rounded-xl mb-4 overflow-hidden scroll-mt-16">
               {/* Day header bar — click to collapse */}
               <div
                 className="flex items-center justify-between px-3 py-2 bg-white/3 cursor-pointer hover:bg-white/5 transition-colors"
@@ -387,7 +420,7 @@ function MarkdownWithDayCopy({ content }: { content: string }) {
               {!isCollapsed && (
                 <div className="px-3 pb-2 prose-trip text-sm">
                   <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {section.replace(/^## Day [^\n]+\n/, "")}
+                    {section.replace(/^##\s+Day\s*\d+[^\n]*\n/, "")}
                   </ReactMarkdown>
                 </div>
               )}
@@ -586,11 +619,6 @@ export function TripPlanner() {
     setCopied(true);
     if (copiedTimer.current) clearTimeout(copiedTimer.current);
     copiedTimer.current = setTimeout(() => setCopied(false), 2000);
-  };
-
-  const handleDownload = () => {
-    const fname = `tripmind-${city || "trip"}-${new Date().toISOString().slice(0,10)}.md`;
-    downloadMarkdown(fname, output);
   };
 
   const handlePrint = () => window.print();
@@ -966,7 +994,7 @@ export function TripPlanner() {
             {output && (
               <div className="ml-auto flex gap-1 no-print overflow-x-auto">
                 <ActionBtn icon={copied ? Check : Copy} label={copied ? "Copied" : "Copy"} active={copied} onClick={handleCopy} />
-                <ActionBtn icon={Download} label="Download" onClick={handleDownload} />
+                <PlannerPdfButton city={city} days={days} travelDate={travelDate} itinerary={output} />
                 <CalendarExportButton city={city} days={days} travelDate={travelDate} itinerary={output} />
                 <ActionBtn icon={Printer} label="Print" onClick={handlePrint} />
                 <ActionBtn icon={BookOpen} label="Save" onClick={handleSave} />

@@ -103,25 +103,36 @@ async function consumeSSE(
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     let accumulated = "";
+    let pending = "";
+    let finished = false;
 
-    while (true) {
+    const processLine = (line: string) => {
+      if (!line.startsWith("data: ")) return;
+      const payload = line.slice(6).trim();
+      if (payload === "[DONE]") {
+        finished = true;
+        return;
+      }
+      const event = JSON.parse(payload) as { content?: string; error?: string };
+      if (event.error) throw new Error(event.error);
+      if (event.content) {
+        accumulated += event.content;
+        onChunk(accumulated);
+      }
+    };
+
+    while (!finished) {
       const { done, value } = await reader.read();
-      if (done) break;
-      const raw = decoder.decode(value, { stream: true });
-      for (const line of raw.split("\n")) {
-        if (!line.startsWith("data: ")) continue;
-        const payload = line.slice(6).trim();
-        if (payload === "[DONE]") break;
-        try {
-          const { content, error } = JSON.parse(payload);
-          if (error) throw new Error(error);
-          accumulated += content;
-          onChunk(accumulated);
-        } catch (error) {
-          if (error instanceof Error && !error.message.startsWith("Unexpected")) {
-            throw error;
-          }
-        }
+      pending += decoder.decode(value, { stream: !done });
+      const lines = pending.split("\n");
+      pending = lines.pop() ?? "";
+      for (const line of lines) {
+        processLine(line);
+        if (finished) break;
+      }
+      if (done) {
+        if (pending.trim()) processLine(pending);
+        break;
       }
     }
     onDone();

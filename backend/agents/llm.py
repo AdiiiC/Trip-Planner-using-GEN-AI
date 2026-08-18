@@ -43,6 +43,8 @@ def get_llm(
     kwargs: dict[str, Any] = {}
     if json_mode:
         kwargs["model_kwargs"] = {"response_format": {"type": "json_object"}}
+    else:
+        kwargs["reasoning_format"] = "parsed"
     return ChatGroq(
         temperature=temperature,
         model_name=primary_model_name(),

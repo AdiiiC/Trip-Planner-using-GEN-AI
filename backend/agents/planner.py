@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import date
 from typing import AsyncIterator
 
+from langchain_core.messages import AIMessage, HumanMessage
 from pydantic import BaseModel, Field, field_validator
 from langchain_core.prompts import ChatPromptTemplate
 
-from agents.llm import astream_with_fallback
+from agents.llm import ainvoke_with_fallback, astream_with_fallback
 
 
 SYSTEM_PROMPT = (
@@ -122,6 +124,17 @@ class VisaInput(BaseModel):
     destination: str = Field(..., min_length=1, max_length=100)
 
 
+def itinerary_days(markdown: str) -> set[int]:
+    """Extract day numbers while accepting normal and non-breaking spaces."""
+    return {int(day) for day in re.findall(r"^##\s+Day\s*(\d+)", markdown, re.MULTILINE)}
+
+
+def _message_text(message: AIMessage) -> str:
+    if isinstance(message.content, str):
+        return message.content
+    return "".join(str(part.get("text", "")) if isinstance(part, dict) else str(part) for part in message.content)
+
+
 async def generate_itinerary(inp: PlanInput) -> AsyncIterator[str]:
     msgs = _itinerary_prompt.format_messages(
         city=inp.city,
@@ -133,8 +146,25 @@ async def generate_itinerary(inp: PlanInput) -> AsyncIterator[str]:
         dietary=inp.dietary,
         currency=inp.currency,
     )
-    async for text in astream_with_fallback(msgs):
-        yield text
+    response = await ainvoke_with_fallback(msgs)
+    itinerary = _message_text(response)
+    expected_days = set(range(1, inp.days + 1))
+    missing = sorted(expected_days - itinerary_days(itinerary))
+
+    if missing:
+        correction = HumanMessage(content=(
+            f"Your response omitted day sections {missing}. Return the complete itinerary again from Day 1 "
+            f"through Day {inp.days}. Include exactly one Markdown heading `## Day N – Theme` for every day. "
+            "Do not summarize, omit, or refer back to the earlier response."
+        ))
+        response = await ainvoke_with_fallback([*msgs, response, correction])
+        itinerary = _message_text(response)
+
+    missing = sorted(expected_days - itinerary_days(itinerary))
+    if missing:
+        raise RuntimeError(f"The generated itinerary is incomplete (missing days: {missing}).")
+
+    yield itinerary
 
 
 async def refine_itinerary(inp: RefineInput) -> AsyncIterator[str]:
