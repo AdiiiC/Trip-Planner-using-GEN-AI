@@ -5,7 +5,7 @@ import re
 from datetime import date
 from typing import AsyncIterator
 
-from langchain_core.messages import AIMessage, HumanMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, Field, field_validator
 from langchain_core.prompts import ChatPromptTemplate
 
@@ -135,6 +135,35 @@ def _message_text(message: AIMessage) -> str:
     return "".join(str(part.get("text", "")) if isinstance(part, dict) else str(part) for part in message.content)
 
 
+async def _complete_itinerary(messages: list, expected_days: set[int]) -> str:
+    response = await ainvoke_with_fallback(messages)
+    itinerary = _message_text(response)
+    missing = sorted(expected_days - itinerary_days(itinerary))
+
+    if missing:
+        correction = HumanMessage(content=(
+            f"Your response omitted day sections {missing}. Return the complete requested section again. "
+            f"Include exactly these Markdown day headings: {sorted(expected_days)} using `## Day N – Theme`. "
+            "Do not summarize, omit, or refer back to the earlier response."
+        ))
+        response = await ainvoke_with_fallback([*messages, response, correction])
+        itinerary = _message_text(response)
+
+    missing = sorted(expected_days - itinerary_days(itinerary))
+    if missing:
+        raise RuntimeError(f"The generated itinerary is incomplete (missing days: {missing}).")
+    return itinerary.strip()
+
+
+def _plan_context(inp: PlanInput) -> str:
+    return (
+        f"Destination: {inp.city}\nTravel date: {inp.travel_date}\n"
+        f"Interests: {', '.join(inp.interests) if inp.interests else 'general sightseeing'}\n"
+        f"Budget: {inp.budget}\nTravel style: {inp.travel_style}\n"
+        f"Dietary preferences: {inp.dietary}\nCurrency: {inp.currency}"
+    )
+
+
 async def generate_itinerary(inp: PlanInput) -> AsyncIterator[str]:
     msgs = _itinerary_prompt.format_messages(
         city=inp.city,
@@ -146,24 +175,34 @@ async def generate_itinerary(inp: PlanInput) -> AsyncIterator[str]:
         dietary=inp.dietary,
         currency=inp.currency,
     )
-    response = await ainvoke_with_fallback(msgs)
-    itinerary = _message_text(response)
     expected_days = set(range(1, inp.days + 1))
-    missing = sorted(expected_days - itinerary_days(itinerary))
+    if inp.days <= 3:
+        yield await _complete_itinerary(msgs, expected_days)
+        return
 
-    if missing:
-        correction = HumanMessage(content=(
-            f"Your response omitted day sections {missing}. Return the complete itinerary again from Day 1 "
-            f"through Day {inp.days}. Include exactly one Markdown heading `## Day N – Theme` for every day. "
-            "Do not summarize, omit, or refer back to the earlier response."
-        ))
-        response = await ainvoke_with_fallback([*msgs, response, correction])
-        itinerary = _message_text(response)
+    batches: list[str] = []
+    for start_day in range(1, inp.days + 1, 2):
+        end_day = min(start_day + 1, inp.days)
+        batch_days = set(range(start_day, end_day + 1))
+        last_batch = end_day == inp.days
+        system = SYSTEM_PROMPT if last_batch else SYSTEM_PROMPT.replace(
+            " End every itinerary with a '## Logistics & Packing Tips' section.", ""
+        )
+        batch_messages = [
+            SystemMessage(content=system),
+            HumanMessage(content=(
+                f"This is part of a {inp.days}-day trip. Generate only Day {start_day} through Day {end_day}.\n"
+                f"{_plan_context(inp)}\n\n"
+                f"Return exactly one `## Day N – Theme` section for each of these days: {sorted(batch_days)}. "
+                f"{'End with `## Logistics & Packing Tips`.' if last_batch else 'Do not add an overview, conclusion, or logistics section.'}"
+            )),
+        ]
+        batches.append(await _complete_itinerary(batch_messages, batch_days))
 
+    itinerary = "\n\n".join(batches)
     missing = sorted(expected_days - itinerary_days(itinerary))
     if missing:
         raise RuntimeError(f"The generated itinerary is incomplete (missing days: {missing}).")
-
     yield itinerary
 
 
