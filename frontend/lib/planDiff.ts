@@ -49,6 +49,12 @@ function rateTable(p: Payload): Record<string, number> {
 const toINR = (amount: number, currency: string, table: Record<string, number>) =>
   amount * (table[currency.toUpperCase()] ?? 1);
 
+/** Plans predating the flipped cash field stored the rupee side directly. */
+const cashINR = (c: Payload, table: Record<string, number>) =>
+  c.amount_foreign !== undefined
+    ? toINR(num(c.amount_foreign), str(c.currency), table)
+    : num(c.amount_inr);
+
 /** Keys duplicates apart so two "Museum" rows don't collapse into one. */
 function keyed(items: Payload[], label: (item: Payload) => string, value: (item: Payload) => number) {
   const out = new Map<string, { label: string; value: number }>();
@@ -107,8 +113,8 @@ export function diffPlans(beforeRaw: unknown, afterRaw: unknown): PlanDiff {
       keyed(rows(before, "extras"), e => str(e.name), e => toINR(num(e.amount), str(e.currency), rb)),
       keyed(rows(after, "extras"), e => str(e.name), e => toINR(num(e.amount), str(e.currency), ra))),
     ...compareSection("Cash",
-      keyed(rows(before, "cash_conversions"), c => `${str(c.currency)} cash`, c => num(c.amount_inr)),
-      keyed(rows(after, "cash_conversions"), c => `${str(c.currency)} cash`, c => num(c.amount_inr))),
+      keyed(rows(before, "cash_conversions"), c => `${str(c.currency)} cash`, c => cashINR(c, rb)),
+      keyed(rows(after, "cash_conversions"), c => `${str(c.currency)} cash`, c => cashINR(c, ra))),
   ];
 
   // Pocket money is entered in USD but only means anything in INR here.

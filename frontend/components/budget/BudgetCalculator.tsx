@@ -53,7 +53,7 @@ const schema = z.object({
   sightseeing: z.array(z.object({ name: z.string().min(1), destination: z.string(), amount: z.number().min(0), currency: z.string() })),
   extras: z.array(z.object({ name: z.string().min(1), destination: z.string(), amount: z.number().min(0), currency: z.string(), prepaid: z.boolean().optional() })),
   pocket_money_usd: z.number().min(0),
-  cash_conversions: z.array(z.object({ currency: z.string().min(1), amount_inr: z.number().min(0) })),
+  cash_conversions: z.array(z.object({ currency: z.string().min(1), amount_foreign: z.number().min(0) })),
   // Trip length: a date range, or a night count when the dates aren't fixed yet.
   start_date: z.string(),
   end_date: z.string(),
@@ -98,8 +98,8 @@ const DEFAULT_VALUES: FormValues = {
   ],
   pocket_money_usd: 750,
   cash_conversions: [
-    { currency: "VND", amount_inr: 6000 },
-    { currency: "MYR", amount_inr: 9000 },
+    { currency: "VND", amount_foreign: 1_500_000 },
+    { currency: "MYR", amount_foreign: 370 },
   ],
   start_date: "",
   end_date: "",
@@ -114,7 +114,29 @@ function withDefaults(values: Record<string, unknown>): FormValues {
   const present = Object.fromEntries(
     Object.entries(values).filter(([, v]) => v !== undefined && v !== null)
   );
-  return { ...DEFAULT_VALUES, ...present } as FormValues;
+  const merged = { ...DEFAULT_VALUES, ...present } as FormValues;
+  return { ...merged, cash_conversions: migrateConversions(present.cash_conversions, merged.exchange_rates) };
+}
+
+/**
+ * Plans saved before this field flipped stored `amount_inr`; the form now holds
+ * the foreign amount, so divide the old value back out by the plan's own rate.
+ */
+function migrateConversions(
+  raw: unknown,
+  rates: FormValues["exchange_rates"],
+): FormValues["cash_conversions"] {
+  if (!Array.isArray(raw)) return DEFAULT_VALUES.cash_conversions;
+  return raw.map(entry => {
+    const row = (entry ?? {}) as { currency?: string; amount_inr?: number; amount_foreign?: number };
+    const currency = row.currency || "THB";
+    if (typeof row.amount_foreign === "number") {
+      return { currency, amount_foreign: row.amount_foreign };
+    }
+    const rate = rateOf(rates, currency);
+    const inr = typeof row.amount_inr === "number" ? row.amount_inr : 0;
+    return { currency, amount_foreign: rate > 0 ? round2(inr / rate) : 0 };
+  });
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -147,6 +169,14 @@ function nightsBetween(start?: string, end?: string): number {
   return Math.round((to - from) / 86_400_000);
 }
 
+/** `1 <currency>` in rupees, from the rates entered on the form. 0 when unset. */
+function rateOf(rates: FormValues["exchange_rates"], currency: string): number {
+  const hit = rates.find(r => r.currency.toUpperCase() === currency.toUpperCase());
+  return hit && hit.rate_to_inr > 0 ? hit.rate_to_inr : 0;
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
 /** Strip comparison-only fields and drop blank rows before hitting the API. */
 function toBudgetInput(d: FormValues, legs: FlightLeg[]): BudgetInput {
   return {
@@ -164,7 +194,11 @@ function toBudgetInput(d: FormValues, legs: FlightLeg[]): BudgetInput {
     sightseeing: d.sightseeing,
     extras: d.extras,
     pocket_money_usd: d.pocket_money_usd,
-    cash_conversions: d.cash_conversions,
+    // The form collects the foreign amount wanted; the API works in rupees.
+    cash_conversions: d.cash_conversions.map(c => ({
+      currency: c.currency,
+      amount_inr: round2((Number(c.amount_foreign) || 0) * rateOf(d.exchange_rates, c.currency)),
+    })),
     start_date: d.start_date || "",
     end_date: d.end_date || "",
     nights: d.nights || 0,
@@ -364,6 +398,7 @@ export function BudgetCalculator() {
 
   // Share entered rates with the Currency Converter widget on the same page
   const watchedRates = watch("exchange_rates");
+  const watchedConversions = watch("cash_conversions");
   useEffect(() => {
     const map: Record<string, number> = { INR: 1 };
     watchedRates.forEach(r => {
@@ -762,29 +797,42 @@ export function BudgetCalculator() {
                 </Field>
               </div>
               <p className="text-xs text-[var(--fg-muted)] mb-2">
-                Allocate some of your pocket money as local cash:
+                Enter how much local cash you want in hand — the rupees to pay are worked
+                out from your exchange rates above.
               </p>
               <div className="space-y-2">
-                {cashConv.fields.map((f, i) => (
-                  <div key={f.id} className="flex gap-2 items-end">
-                    <Field className="w-28">
-                      <Label>Currency</Label>
-                      <select className="input-dark" {...register(`cash_conversions.${i}.currency`)}>
-                        {allCurrencies.map(c => <option key={c}>{c}</option>)}
-                      </select>
-                    </Field>
-                    <Field className="flex-1">
-                      <Label>INR to convert</Label>
-                      <input type="number" inputMode="decimal" className="input-dark"
-                        {...register(`cash_conversions.${i}.amount_inr`, { valueAsNumber: true })} />
-                    </Field>
-                    <button type="button" onClick={() => cashConv.remove(i)} className="mb-0.5 text-red-400/60 hover:text-red-400">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                ))}
+                {cashConv.fields.map((f, i) => {
+                  const row = watchedConversions?.[i];
+                  const currency = row?.currency ?? "";
+                  const rate = rateOf(watchedRates, currency);
+                  return (
+                    <div key={f.id}>
+                      <div className="flex gap-2 items-end">
+                        <Field className="w-28">
+                          <Label>Currency</Label>
+                          <select className="input-dark" {...register(`cash_conversions.${i}.currency`)}>
+                            {allCurrencies.map(c => <option key={c}>{c}</option>)}
+                          </select>
+                        </Field>
+                        <Field className="flex-1 min-w-0">
+                          <Label>{currency ? `${currency} needed` : "Amount needed"}</Label>
+                          <input type="number" inputMode="decimal" className="input-dark"
+                            {...register(`cash_conversions.${i}.amount_foreign`, { valueAsNumber: true })} />
+                        </Field>
+                        <button type="button" onClick={() => cashConv.remove(i)} className="mb-0.5 text-red-400/60 hover:text-red-400">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      {currency && rate === 0 && (
+                        <p className="text-[11px] text-amber-400 mt-1">
+                          Add a {currency} rate in Exchange Rates to price this.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-              <button type="button" onClick={() => cashConv.append({ currency: "THB", amount_inr: 0 })}
+              <button type="button" onClick={() => cashConv.append({ currency: "THB", amount_foreign: 0 })}
                 className="mt-2 flex items-center gap-1 text-emerald-400 text-sm hover:text-emerald-300">
                 <PlusCircle className="w-4 h-4" /> Add conversion
               </button>
