@@ -10,6 +10,8 @@ import type { BudgetResult } from "@/lib/types";
 
 const inr = (n: number) => `Rs ${new Intl.NumberFormat("en-IN").format(Math.round(n))}`;
 const usd = (n: number) => `$${n.toFixed(2)}`;
+// Helvetica is a standard PDF font with no glyph for "→" — it renders as a stray quote.
+const ascii = (v: string) => v.replace(/→/g, "->");
 
 const C = {
   fg: "#111827", muted: "#6b7280", line: "#e5e7eb", accent: "#047857",
@@ -84,7 +86,7 @@ function BudgetDoc({ result, title }: { result: BudgetResult; title: string }) {
           <Text style={s.sectionTitle}>1. Fixed Costs</Text>
 
           <Text style={s.subTitle}>Flights</Text>
-          {fc.flights.items.map((f, i) => <Line key={i} l={f.route} m={f.date} r={inr(f.amount_inr)} />)}
+          {fc.flights.items.map((f, i) => <Line key={i} l={ascii(f.route)} m={f.date} r={inr(f.amount_inr)} />)}
           <Line l="Flights subtotal" r={inr(fc.flights.total_inr)} boldRow />
 
           <Text style={s.subTitle}>Stays</Text>
@@ -109,7 +111,7 @@ function BudgetDoc({ result, title }: { result: BudgetResult; title: string }) {
         <View style={s.section}>
           <Text style={s.sectionTitle}>2. Cash Conversion &amp; Pocket Money</Text>
           <Line l="Pocket money" m={usd(cc.pocket_money_usd)} r={inr(cc.pocket_money_inr)} />
-          {cc.allocations.map((a, i) => <Line key={i} l={`  → ${a.display}`} r={inr(a.inr_spent)} />)}
+          {cc.allocations.map((a, i) => <Line key={i} l={`  ${ascii(a.display)}`} r={inr(a.inr_spent)} />)}
           <Line l="Remaining on USD / forex card" m={usd(cc.usd_forex_remaining_usd)} r={inr(cc.usd_forex_remaining_inr)} />
           <Line l="Already committed (sightseeing + on-arrival extras)" r={inr(cc.committed_inr)} boldRow />
           <Line l="Free to spend" r={inr(cc.free_spend_inr)} boldRow />
@@ -121,7 +123,7 @@ function BudgetDoc({ result, title }: { result: BudgetResult; title: string }) {
             <Text style={s.sectionTitle}>3. Per Day &amp; Target</Text>
             {trip.days > 0 && (
               <>
-                <Line l="Trip length" m={trip.start_date && trip.end_date ? `${trip.start_date} → ${trip.end_date}` : undefined}
+                <Line l="Trip length" m={trip.start_date && trip.end_date ? `${trip.start_date} -> ${trip.end_date}` : undefined}
                   r={`${trip.nights} nights / ${trip.days} days`} />
                 <Line l="All-in per day" r={inr(trip.per_day_all_in_inr)} />
                 <Line l="Cash per day (pocket money)" r={inr(trip.per_day_on_ground_inr)} />
