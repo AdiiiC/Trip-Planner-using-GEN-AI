@@ -28,6 +28,7 @@ import { CalendarExportButton } from "@/components/ui/CalendarExport";
 import { PlannerPdfButton } from "@/components/planner/PlannerPdfButton";
 import { RouteOptimizer } from "@/components/planner/RouteOptimizer";
 import { CostBreakdown } from "@/components/planner/CostBreakdown";
+import { splitDays, replaceDay } from "@/lib/itineraryDays";
 import { useGeocodedStops } from "@/lib/hooks";
 import Image from "next/image";
 import dynamic from "next/dynamic";
@@ -434,6 +435,7 @@ export function TripPlanner() {
   const [error, setError]       = useState("");
   const [mode, setMode]         = useState<PlanMode>("plan");
   const [feedback, setFeedback] = useState("");
+  const [refineDay, setRefineDay] = useState<number | "all">("all");
   const [copied, setCopied]     = useState(false);
   const [shared, setShared]     = useState(false);
   const [activeTab, setActiveTab] = useState<"output" | "costs" | "refine" | "history">("output");
@@ -554,6 +556,7 @@ export function TripPlanner() {
     setStreaming(true);
     setError("");
     setActiveTab("output");
+    setRefineDay("all");
     fn(
       (t) => setOutput(t),
       () => setStreaming(false),
@@ -612,9 +615,31 @@ export function TripPlanner() {
     startStream((oc, od, oe) => api.estimateInsurance(v, oc, od, oe));
   };
 
+  const dayOptions = useMemo(() => splitDays(output).map(s => s.day), [output]);
+
   const handleRefine = () => {
     if (!output || !feedback.trim()) return;
-    startStream((oc, od, oe) => api.refineTrip({ itinerary: output, feedback }, oc, od, oe));
+
+    if (refineDay === "all") {
+      startStream((oc, od, oe) => api.refineTrip({ itinerary: output, feedback }, oc, od, oe));
+      setFeedback("");
+      return;
+    }
+
+    const section = splitDays(output).find(s => s.day === refineDay);
+    if (!section) return;
+
+    // Only the target day goes to the model; the stream is spliced back into the full plan.
+    const base = output;
+    setStreaming(true);
+    setError("");
+    setActiveTab("output");
+    api.refineTrip(
+      { itinerary: section.markdown, feedback, day: refineDay },
+      (t) => setOutput(replaceDay(base, refineDay, t)),
+      () => setStreaming(false),
+      (e) => { setError(e.message); setStreaming(false); },
+    );
     setFeedback("");
   };
 
@@ -1096,14 +1121,46 @@ export function TripPlanner() {
             {/* ── Refine tab ── */}
             {activeTab === "refine" && (
               <div className="space-y-4">
-                <p className="text-[var(--fg-muted)] text-sm">Describe what you&apos;d like to change:</p>
+                {dayOptions.length > 0 && (
+                  <div>
+                    <p className="text-[var(--fg-muted)] text-sm mb-2">What should I change?</p>
+                    <div className="flex flex-wrap gap-2">
+                      <button onClick={() => setRefineDay("all")}
+                        className={cn("px-3 py-1.5 text-sm rounded-lg border transition-colors",
+                          refineDay === "all"
+                            ? "bg-emerald-600 border-emerald-500 text-white"
+                            : "border-white/10 text-[var(--fg-muted)] hover:text-white hover:border-white/25")}>
+                        Whole trip
+                      </button>
+                      {dayOptions.map(d => (
+                        <button key={d} onClick={() => setRefineDay(d)}
+                          className={cn("px-3 py-1.5 text-sm rounded-lg border transition-colors",
+                            refineDay === d
+                              ? "bg-emerald-600 border-emerald-500 text-white"
+                              : "border-white/10 text-[var(--fg-muted)] hover:text-white hover:border-white/25")}>
+                          Day {d}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <textarea rows={5} value={feedback} onChange={e => setFeedback(e.target.value)}
-                  placeholder="Make Day 2 more relaxed, swap dinner for street food…"
+                  placeholder={refineDay === "all"
+                    ? "Make Day 2 more relaxed, swap dinner for street food…"
+                    : "Swap lunch, add a rest stop, cut the museum…"}
                   className="input-dark resize-none" />
-                <button onClick={handleRefine} disabled={streaming || !output || !feedback.trim()}
-                  className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-60 transition-colors">
-                  <Send className="w-4 h-4" /> Refine Itinerary
-                </button>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <button onClick={handleRefine} disabled={streaming || !output || !feedback.trim()}
+                    className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-2 rounded-xl text-sm font-medium disabled:opacity-60 transition-colors">
+                    <Send className="w-4 h-4" />
+                    {refineDay === "all" ? "Refine itinerary" : `Refine Day ${refineDay}`}
+                  </button>
+                  {refineDay !== "all" && (
+                    <span className="text-xs text-emerald-400/80">
+                      Only Day {refineDay} is sent to the model — the rest of your plan stays untouched.
+                    </span>
+                  )}
+                </div>
               </div>
             )}
 

@@ -42,6 +42,16 @@ _refine_prompt = ChatPromptTemplate.from_messages([
      "Return the complete updated Markdown itinerary."),
 ])
 
+_refine_day_prompt = ChatPromptTemplate.from_messages([
+    ("system", SYSTEM_PROMPT),
+    ("human",
+     "Here is a single day taken from a longer itinerary:\n\n{itinerary}\n\n"
+     "User feedback: \"{feedback}\"\n\n"
+     "Revise only this day, addressing the feedback. Keep everything that already works. "
+     "Return only the revised `## Day {day}` section in Markdown — no other days, "
+     "no preamble and no closing commentary."),
+])
+
 _packing_prompt = ChatPromptTemplate.from_messages([
     ("system", "You are a seasoned travel packing expert."),
     ("human",
@@ -92,6 +102,8 @@ class PlanInput(BaseModel):
 class RefineInput(BaseModel):
     itinerary: str = Field(..., min_length=1, max_length=50_000)
     feedback:  str = Field(..., min_length=1, max_length=2_000)
+    # When set, `itinerary` carries only that day's section and only that day is returned.
+    day:       int | None = Field(default=None, ge=1, le=14)
 
 
 class PackingInput(BaseModel):
@@ -207,7 +219,12 @@ async def generate_itinerary(inp: PlanInput) -> AsyncIterator[str]:
 
 
 async def refine_itinerary(inp: RefineInput) -> AsyncIterator[str]:
-    msgs = _refine_prompt.format_messages(itinerary=inp.itinerary, feedback=inp.feedback)
+    if inp.day is None:
+        msgs = _refine_prompt.format_messages(itinerary=inp.itinerary, feedback=inp.feedback)
+    else:
+        msgs = _refine_day_prompt.format_messages(
+            itinerary=inp.itinerary, feedback=inp.feedback, day=inp.day,
+        )
     async for text in astream_with_fallback(msgs):
         yield text
 

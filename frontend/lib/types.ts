@@ -165,6 +165,8 @@ export interface PlanInput {
 export interface RefineInput {
   itinerary: string;
   feedback: string;
+  /** When set, `itinerary` carries only that day's section and only that day is returned. */
+  day?: number;
 }
 
 export interface PackingInput {
