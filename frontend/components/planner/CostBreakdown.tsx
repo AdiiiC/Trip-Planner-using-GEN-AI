@@ -3,8 +3,8 @@
 import { useMemo } from "react";
 import { motion } from "framer-motion";
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
-import { Calculator, RefreshCw, Sparkles, Receipt } from "lucide-react";
-import { useExtractCosts } from "@/lib/hooks";
+import { Receipt, Zap } from "lucide-react";
+import { parseCosts } from "@/lib/tripModel";
 
 const CATEGORY_COLORS: Record<string, string> = {
   flight: "#6366f1",
@@ -30,12 +30,12 @@ function money(amount: number, currency: string) {
 }
 
 export function CostBreakdown({ itinerary, currency }: { itinerary: string; currency: string }) {
-  const extract = useExtractCosts();
-  const data = extract.data;
+  // Read straight from the itinerary text; this was previously a second full-plan LLM call.
+  const data = useMemo(() => parseCosts(itinerary, currency), [itinerary, currency]);
 
   const byCategory = useMemo(() => {
     const totals = new Map<string, number>();
-    for (const item of data?.items ?? []) {
+    for (const item of data.items) {
       const key = (item.category || "extra").toLowerCase();
       totals.set(key, (totals.get(key) ?? 0) + (Number(item.amount) || 0));
     }
@@ -44,13 +44,12 @@ export function CostBreakdown({ itinerary, currency }: { itinerary: string; curr
       .sort((a, b) => b.value - a.value);
   }, [data]);
 
-  // Summed locally: the model's own total_estimate is sometimes missing or non-numeric.
   const total = useMemo(
-    () => (data?.items ?? []).reduce((sum, i) => sum + (Number(i.amount) || 0), 0),
+    () => data.items.reduce((sum, i) => sum + (Number(i.amount) || 0), 0),
     [data],
   );
 
-  const resultCurrency = data?.currency || currency || "USD";
+  const resultCurrency = data.currency || currency || "USD";
 
   if (!itinerary.trim()) {
     return (
@@ -68,38 +67,22 @@ export function CostBreakdown({ itinerary, currency }: { itinerary: string; curr
             <Receipt className="w-4 h-4 text-emerald-400" />
             <p className="text-sm font-medium text-white">Cost breakdown</p>
             <span className="text-[10px] text-emerald-300 bg-emerald-600/10 border border-emerald-500/30 rounded-full px-2 py-0.5 flex items-center gap-1">
-              <Sparkles className="w-2.5 h-2.5" /> AI
+              <Zap className="w-2.5 h-2.5" /> Instant
             </span>
           </div>
           <p className="text-xs text-[var(--fg-muted)] mt-1 max-w-md">
             Reads every price mentioned in your itinerary and groups it into categories.
           </p>
         </div>
-        <button
-          type="button"
-          disabled={extract.isPending}
-          onClick={() => extract.mutate({ itinerary, currency })}
-          className="shrink-0 flex items-center gap-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg px-3 py-1.5 transition-colors disabled:opacity-60"
-        >
-          {extract.isPending
-            ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Reading…</>
-            : <><Calculator className="w-3.5 h-3.5" /> {data ? "Recalculate" : "Extract costs"}</>}
-        </button>
       </div>
 
-      {extract.isError && (
-        <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-red-400 text-sm">
-          Could not read costs from this itinerary. Please try again.
-        </div>
-      )}
-
-      {data && data.items.length === 0 && (
+      {data.items.length === 0 && (
         <p className="text-[var(--fg-muted)] text-sm text-center py-6">
           No prices were mentioned in this itinerary.
         </p>
       )}
 
-      {data && data.items.length > 0 && (
+      {data.items.length > 0 && (
         <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="rounded-xl border border-white/5 bg-white/3 p-4 flex flex-col justify-center">
