@@ -13,6 +13,9 @@ import { formatINR, formatUSD, formatNumber, cn } from "@/lib/utils";
 import { setUserRates } from "@/lib/userRates";
 import { BudgetPdfButton } from "@/components/budget/BudgetPdfButton";
 import { SavedPlans } from "@/components/budget/SavedPlans";
+import { buildCashPlan, suggestedUsdNotes, type CashCommitment, type CashPlanFormData } from "@/lib/cashPlan";
+import { CashFxPanel, CashPlanStatus, CountryPlanPanel } from "@/components/budget/CashPlanResults";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 // ─── Route auto-formatter ────────────────────────────────────────────────────
 // Turns "BLR-SGN", "BLR > SGN", "BLR to SGN", "BLR SGN" → "BLR → SGN"
@@ -25,7 +28,7 @@ function normalizeRoute(raw: string): string {
 }
 import { VisaBadge, VisaResultCard } from "@/components/visa/VisaCostChecker";
 import { PrepaidExtras } from "@/components/budget/PrepaidExtras";
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, ComposedChart, Area, Line, XAxis, YAxis, ReferenceLine } from "recharts";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from "recharts";
 import { useEffect, useRef, useState as useCountState } from "react";
 
 // ─── schema ───────────────────────────────────────────────────────────────────
@@ -54,6 +57,17 @@ const schema = z.object({
   extras: z.array(z.object({ name: z.string().min(1), destination: z.string(), amount: z.number().min(0), currency: z.string(), prepaid: z.boolean().optional() })),
   pocket_money_usd: z.number().min(0),
   cash_conversions: z.array(z.object({ currency: z.string().min(1), amount_foreign: z.number().min(0) })),
+  physical_usd_cash: z.number().min(0),
+  usd_notes_100: z.number().int().min(0),
+  usd_notes_50: z.number().int().min(0),
+  exchange_plan: z.array(z.object({
+    destination: z.string(),
+    currency: z.string().min(1),
+    usd_amount: z.number().min(0),
+    rate_per_usd: z.number().min(0),
+    rate_source: z.string(),
+    rate_checked_at: z.string(),
+  })),
   // Trip length: a date range, or a night count when the dates aren't fixed yet.
   start_date: z.string(),
   end_date: z.string(),
@@ -101,6 +115,10 @@ const DEFAULT_VALUES: FormValues = {
     { currency: "VND", amount_foreign: 1_500_000 },
     { currency: "MYR", amount_foreign: 370 },
   ],
+  physical_usd_cash: 0,
+  usd_notes_100: 0,
+  usd_notes_50: 0,
+  exchange_plan: [],
   start_date: "",
   end_date: "",
   nights: 0,
@@ -115,7 +133,30 @@ function withDefaults(values: Record<string, unknown>): FormValues {
     Object.entries(values).filter(([, v]) => v !== undefined && v !== null)
   );
   const merged = { ...DEFAULT_VALUES, ...present } as FormValues;
-  return { ...merged, cash_conversions: migrateConversions(present.cash_conversions, merged.exchange_rates) };
+  const cashConversions = migrateConversions(present.cash_conversions, merged.exchange_rates);
+  const inferredCash = inferUnconvertedUsd({ ...merged, cash_conversions: cashConversions });
+  const physicalUsd = typeof present.physical_usd_cash === "number"
+    ? Math.max(present.physical_usd_cash, 0)
+    : inferredCash;
+  const suggestedNotes = suggestedUsdNotes(physicalUsd);
+  return {
+    ...merged,
+    cash_conversions: cashConversions,
+    physical_usd_cash: physicalUsd,
+    usd_notes_100: typeof present.usd_notes_100 === "number" ? present.usd_notes_100 : suggestedNotes.hundreds,
+    usd_notes_50: typeof present.usd_notes_50 === "number" ? present.usd_notes_50 : suggestedNotes.fifties,
+    exchange_plan: Array.isArray(present.exchange_plan) ? merged.exchange_plan : [],
+  };
+}
+
+function inferUnconvertedUsd(values: Pick<FormValues, "pocket_money_usd" | "exchange_rates" | "cash_conversions">): number {
+  const usdRate = rateOf(values.exchange_rates, "USD");
+  if (usdRate <= 0) return 0;
+  const localCashInr = values.cash_conversions.reduce(
+    (sum, row) => sum + row.amount_foreign * rateOf(values.exchange_rates, row.currency),
+    0,
+  );
+  return round2(Math.max(values.pocket_money_usd - localCashInr / usdRate, 0));
 }
 
 /**
@@ -207,11 +248,7 @@ function toBudgetInput(d: FormValues, legs: FlightLeg[]): BudgetInput {
 }
 
 function SectionCard({ title, children, defaultOpen = true }: { title: string; children: React.ReactNode; defaultOpen?: boolean }) {
-  const [open, setOpen] = useState(() => {
-    // On mobile (< 768px), start all sections closed to reduce scroll
-    if (typeof window !== "undefined" && window.innerWidth < 768) return false;
-    return defaultOpen;
-  });
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <div className="glass rounded-2xl overflow-hidden">
       <button
@@ -280,6 +317,7 @@ export function BudgetCalculator() {
   const sight      = useFieldArray({ control, name: "sightseeing" });
   const xtra       = useFieldArray({ control, name: "extras" });
   const cashConv   = useFieldArray({ control, name: "cash_conversions" });
+  const exchangePlan = useFieldArray({ control, name: "exchange_plan" });
 
   const mutation = useMutation({
     mutationFn: async (data: FormValues) => {
@@ -399,6 +437,7 @@ export function BudgetCalculator() {
   // Share entered rates with the Currency Converter widget on the same page
   const watchedRates = watch("exchange_rates");
   const watchedConversions = watch("cash_conversions");
+  const physicalUsdCash = watch("physical_usd_cash");
   useEffect(() => {
     const map: Record<string, number> = { INR: 1 };
     watchedRates.forEach(r => {
@@ -410,6 +449,12 @@ export function BudgetCalculator() {
   // Lives here rather than in SavedPlans because the PDF export titles itself with it.
   const [planName, setPlanName] = useState("");
 
+  const suggestDenominations = useCallback(() => {
+    const suggestion = suggestedUsdNotes(physicalUsdCash);
+    setValue("usd_notes_100", suggestion.hundreds);
+    setValue("usd_notes_50", suggestion.fifties);
+  }, [physicalUsdCash, setValue]);
+
   const loadPlan = useCallback((values: Record<string, unknown>) => {
     // reset() replaces the entire form, so a plan saved before a field existed
     // would leave that field undefined and crash on first render.
@@ -417,6 +462,35 @@ export function BudgetCalculator() {
     setResult(null);
     setResultB(null);
   }, [reset]);
+
+  const activeResult = activeCase === "b" && resultB ? resultB : result;
+  const cashPlanForm: CashPlanFormData = {
+    physical_usd_cash: physicalUsdCash,
+    usd_notes_100: watch("usd_notes_100"),
+    usd_notes_50: watch("usd_notes_50"),
+    exchange_plan: watch("exchange_plan"),
+  };
+  const cashCommitments: CashCommitment[] = activeResult ? [
+    ...watch("sightseeing").map((item) => ({
+      name: item.name,
+      currency: item.currency,
+      amount: item.amount,
+      kind: "sightseeing" as const,
+    })),
+    ...watch("extras").flatMap((item, index) => activeResult.fixed_costs.extras.items[index]?.prepaid ? [] : [{
+      name: item.name,
+      currency: item.currency,
+      amount: item.amount,
+      kind: "extra" as const,
+    }]),
+  ] : [];
+  const activeCashPlan = activeResult ? buildCashPlan({
+    form: cashPlanForm,
+    allocations: activeResult.cash_conversion.allocations,
+    commitments: cashCommitments,
+    rates: activeResult.rates_used,
+    unconverted_usd: activeResult.cash_conversion.usd_forex_remaining_usd,
+  }) : null;
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -795,6 +869,11 @@ export function BudgetCalculator() {
                   <input type="number" inputMode="decimal" className="input-dark"
                     {...register("pocket_money_usd", { valueAsNumber: true })} />
                 </Field>
+                <Field>
+                  <Label>Physical USD cash</Label>
+                  <input type="number" inputMode="decimal" className="input-dark"
+                    {...register("physical_usd_cash", { valueAsNumber: true })} />
+                </Field>
               </div>
               <p className="text-xs text-[var(--fg-muted)] mb-2">
                 Enter how much local cash you want in hand — the rupees to pay are worked
@@ -836,6 +915,90 @@ export function BudgetCalculator() {
                 className="mt-2 flex items-center gap-1 text-emerald-400 text-sm hover:text-emerald-300">
                 <PlusCircle className="w-4 h-4" /> Add conversion
               </button>
+
+              <div className="pt-4 mt-4 border-t border-[var(--border)] space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium text-white">USD notes</p>
+                    <p className="text-[11px] text-[var(--fg-muted)]">Track physical notes separately from a forex card.</p>
+                  </div>
+                  <button type="button" onClick={suggestDenominations}
+                    className="text-xs text-indigo-300 hover:text-indigo-200">
+                    Suggest split
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field>
+                    <Label>Number of $100 notes</Label>
+                    <input type="number" min={0} step={1} className="input-dark"
+                      {...register("usd_notes_100", { valueAsNumber: true })} />
+                  </Field>
+                  <Field>
+                    <Label>Number of $50 notes</Label>
+                    <input type="number" min={0} step={1} className="input-dark"
+                      {...register("usd_notes_50", { valueAsNumber: true })} />
+                  </Field>
+                </div>
+              </div>
+
+              <div className="pt-4 mt-4 border-t border-[var(--border)] space-y-3">
+                <div>
+                  <p className="text-sm font-medium text-white">Destination exchanges</p>
+                  <p className="text-[11px] text-[var(--fg-muted)]">Plan where physical USD becomes local cash and record the rate used.</p>
+                </div>
+                <div className="space-y-3">
+                  {exchangePlan.fields.map((field, index) => (
+                    <div key={field.id} className="rounded-xl border border-[var(--border)] bg-black/15 p-3 space-y-2">
+                      <div className="grid grid-cols-[1fr_82px] sm:grid-cols-[1fr_88px_90px_1fr_auto] gap-2 items-end">
+                        <Field>
+                          <Label>Destination</Label>
+                          <input className="input-dark" placeholder="Vietnam"
+                            {...register(`exchange_plan.${index}.destination`)} />
+                        </Field>
+                        <Field>
+                          <Label>Currency</Label>
+                          <select className="input-dark" {...register(`exchange_plan.${index}.currency`)}>
+                            {allCurrencies.filter(currency => currency !== "USD").map(currency => <option key={currency}>{currency}</option>)}
+                          </select>
+                        </Field>
+                        <Field>
+                          <Label>USD</Label>
+                          <input type="number" min={0} inputMode="decimal" className="input-dark"
+                            {...register(`exchange_plan.${index}.usd_amount`, { valueAsNumber: true })} />
+                        </Field>
+                        <Field className="col-span-2 sm:col-span-1">
+                          <Label>Local per $1</Label>
+                          <input type="number" min={0} inputMode="decimal" step="any" className="input-dark"
+                            {...register(`exchange_plan.${index}.rate_per_usd`, { valueAsNumber: true })} />
+                        </Field>
+                        <button type="button" onClick={() => exchangePlan.remove(index)}
+                          title="Remove destination exchange"
+                          className="mb-2 text-red-400/60 hover:text-red-400">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                      <div className="grid sm:grid-cols-2 gap-2">
+                        <Field>
+                          <Label>Rate source</Label>
+                          <input className="input-dark" placeholder="Money changer or bank"
+                            {...register(`exchange_plan.${index}.rate_source`)} />
+                        </Field>
+                        <Field>
+                          <Label>Rate checked</Label>
+                          <input type="date" className="input-dark"
+                            {...register(`exchange_plan.${index}.rate_checked_at`)} />
+                        </Field>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" onClick={() => exchangePlan.append({
+                  destination: "", currency: "THB", usd_amount: 0, rate_per_usd: 0, rate_source: "", rate_checked_at: "",
+                })}
+                  className="flex items-center gap-1 text-emerald-400 text-sm hover:text-emerald-300">
+                  <PlusCircle className="w-4 h-4" /> Add destination exchange
+                </button>
+              </div>
             </SectionCard>
 
             <button type="submit" disabled={mutation.isPending}
@@ -866,18 +1029,20 @@ export function BudgetCalculator() {
               />
             )}
             <AnimatePresence>
-              {result && (
+              {activeResult && (
                 <div className="flex justify-end">
                   <BudgetPdfButton
-                    result={activeCase === "b" && resultB ? resultB : result}
+                    result={activeResult}
+                    cashPlan={activeCashPlan ?? undefined}
                     title={planName || "Trip Budget"}
                   />
                 </div>
               )}
-              {result && (
+              {activeResult && activeCashPlan && (
                 <BudgetResults
                   key={activeCase}
-                  result={activeCase === "b" && resultB ? resultB : result}
+                  result={activeResult}
+                  cashPlan={activeCashPlan}
                 />
               )}
               {result && (
@@ -995,14 +1160,6 @@ function Meter({ value, total, color, delay = 0 }: { value: number; total: numbe
   );
 }
 
-/** Short money for chart axes, where ₹1,20,000 doesn't fit. */
-function compactINR(value: number): string {
-  const abs = Math.abs(value);
-  if (abs >= 100_000) return `₹${(value / 100_000).toFixed(abs >= 1_000_000 ? 0 : 1)}L`;
-  if (abs >= 1_000) return `₹${Math.round(value / 1_000)}k`;
-  return `₹${Math.round(value)}`;
-}
-
 /** Progress ring against the budget target. Fills past the ring when over. */
 function TargetRing({ target }: { target: BudgetTarget }) {
   const over = target.status === "over";
@@ -1032,8 +1189,8 @@ function TargetRing({ target }: { target: BudgetTarget }) {
 }
 
 /**
- * Per-day pacing and the burn-down: prepaid money is already gone at departure,
- * then pocket money drains across the trip.
+ * Per-day pacing. Destination cash belongs in the country plan instead of an
+ * even-spend burn-down that can imply false precision.
  */
 function TripPacing({ result }: { result: BudgetResult }) {
   // The frontend and backend deploy independently, so tolerate a result computed
@@ -1041,7 +1198,6 @@ function TripPacing({ result }: { result: BudgetResult }) {
   const { trip, target } = result;
   if (!trip || (trip.days === 0 && !target)) return null;
 
-  const hasChart = trip.days >= 2;
   const dailyOver = target != null && target.daily_delta_pct > 0;
 
   return (
@@ -1093,46 +1249,6 @@ function TripPacing({ result }: { result: BudgetResult }) {
         </div>
       )}
 
-      {hasChart && (
-        <div>
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-[11px] text-[var(--fg-muted)]">Burn-down</p>
-            <div className="flex items-center gap-3 text-[10px] text-[var(--fg-muted)]">
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-emerald-400" /> Cash left
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-indigo-400" /> Spent so far
-              </span>
-            </div>
-          </div>
-          <div className="h-[150px] -ml-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={trip.burn_down} margin={{ top: 4, right: 6, bottom: 0, left: 0 }}>
-                <defs>
-                  <linearGradient id="cashLeft" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#34d399" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#34d399" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="day" tick={{ fontSize: 10, fill: "var(--fg-muted)" }} tickLine={false} axisLine={false} />
-                <YAxis tickFormatter={compactINR} tick={{ fontSize: 10, fill: "var(--fg-muted)" }} tickLine={false} axisLine={false} width={44} />
-                <Tooltip
-                  formatter={(v, name) => [formatINR(Number(v)), name === "cash_left_inr" ? "Cash left" : "Spent so far"]}
-                  labelFormatter={(day) => (day === 0 ? "Departure" : `Day ${day}`)}
-                  contentStyle={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 8, color: "var(--fg)", fontSize: 12 }}
-                />
-                {target && (
-                  <ReferenceLine y={target.amount_inr} stroke="#fb7185" strokeDasharray="4 4" strokeWidth={1}
-                    label={{ value: "Target", position: "insideTopRight", fill: "#fb7185", fontSize: 9 }} />
-                )}
-                <Area type="monotone" dataKey="cash_left_inr" stroke="#34d399" strokeWidth={2} fill="url(#cashLeft)" />
-                <Line type="monotone" dataKey="cumulative_inr" stroke="#818cf8" strokeWidth={2} dot={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -1147,7 +1263,7 @@ function StatTile({ label, value, sub, color }: { label: string; value: string; 
   );
 }
 
-function BudgetResults({ result }: { result: BudgetResult }) {
+function BudgetResults({ result, cashPlan }: { result: BudgetResult; cashPlan: ReturnType<typeof buildCashPlan> }) {
   const fc = result.fixed_costs;
   const cc = result.cash_conversion;
   const gt = result.grand_total;
@@ -1201,11 +1317,16 @@ function BudgetResults({ result }: { result: BudgetResult }) {
           ]}
         />
 
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 gap-2">
           <StatTile
             label="Prepaid"
             value={formatINR(gt.prepaid_inr)}
             sub={`${pctLabel(gt.prepaid_inr, gt.inr)} · before you fly`}
+          />
+          <StatTile
+            label="Committed abroad"
+            value={formatINR(cc.committed_inr)}
+            sub={`${pctLabel(cc.committed_inr, gt.inr)} · already planned`}
           />
           <StatTile
             label="Carried"
@@ -1234,10 +1355,21 @@ function BudgetResults({ result }: { result: BudgetResult }) {
         )}
       </div>
 
-      <TripPacing result={result} />
+      <CashPlanStatus plan={cashPlan} />
 
-      {/* Donut + per-category meters */}
-      <div className="glass rounded-2xl p-4">
+      <Tabs defaultValue={cashPlan.stops.length > 0 ? "country" : "overview"}>
+        <TabsList className="w-full overflow-x-auto">
+          <TabsTrigger value="overview" className="flex-1">Overview</TabsTrigger>
+          <TabsTrigger value="country" className="flex-1">Country plan</TabsTrigger>
+          <TabsTrigger value="cash" className="flex-1">Cash &amp; FX</TabsTrigger>
+          <TabsTrigger value="breakdown" className="flex-1">Breakdown</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="overview" className="space-y-4">
+          <TripPacing result={result} />
+
+          {/* Donut + per-category meters */}
+          <div className="glass rounded-2xl p-4">
         <p className="text-sm font-medium text-white">Where the money goes</p>
         <p className="text-[11px] text-[var(--fg-muted)] mt-0.5 mb-3">
           Sightseeing and on-arrival extras are paid out of pocket money, so nothing is counted twice.
@@ -1277,10 +1409,21 @@ function BudgetResults({ result }: { result: BudgetResult }) {
             ))}
           </div>
         </div>
-      </div>
+          </div>
+        </TabsContent>
 
-      {/* Fixed costs */}
-      <div className="glass rounded-2xl p-4 space-y-3">
+        <TabsContent value="country">
+          <CountryPlanPanel plan={cashPlan} rates={result.rates_used} />
+        </TabsContent>
+
+        <TabsContent value="cash">
+          <CashFxPanel plan={cashPlan} result={result} />
+        </TabsContent>
+
+        <TabsContent value="breakdown" className="space-y-4">
+
+          {/* Fixed costs */}
+          <div className="glass rounded-2xl p-4 space-y-3">
         <p className="text-sm font-medium text-white">1. Fixed Costs</p>
         <ResultSection label="Flights" total={fc.flights.total_inr} of={fc.total_inr} color="#6366f1">
           {fc.flights.items.map((f, i) => (
@@ -1310,10 +1453,10 @@ function BudgetResults({ result }: { result: BudgetResult }) {
           <span>Total Fixed</span>
           <span>{formatINR(fc.total_inr)}</span>
         </div>
-      </div>
+          </div>
 
-      {/* Cash conversion */}
-      <div className="glass rounded-2xl p-4 space-y-3">
+          {/* Cash conversion */}
+          <div className="glass rounded-2xl p-4 space-y-3">
         <p className="text-sm font-medium text-white">2. Cash Conversion</p>
         <SplitStrip
           segments={[
@@ -1322,7 +1465,7 @@ function BudgetResults({ result }: { result: BudgetResult }) {
               value: a.inr_spent,
               color: CASH_COLORS[i % CASH_COLORS.length],
             })),
-            { label: "USD / forex card", value: Math.max(cc.usd_forex_remaining_inr, 0), color: "#64748b" },
+            { label: "Unconverted USD", value: Math.max(cc.usd_forex_remaining_inr, 0), color: "#64748b" },
           ]}
         />
         <div className="space-y-2">
@@ -1330,9 +1473,12 @@ function BudgetResults({ result }: { result: BudgetResult }) {
           {cc.allocations.map((a, i) => (
             <Row key={i} label={`→ ${a.display}`} value={formatINR(a.inr_spent)} sub />
           ))}
-          <Row label="Remaining on USD/Forex card" value={`${formatUSD(cc.usd_forex_remaining_usd)} (${formatINR(cc.usd_forex_remaining_inr)})`} />
+          <Row label="Physical USD cash" value={formatUSD(cashPlan.physical_usd_cash)} />
+          <Row label="Forex card balance" value={formatUSD(cashPlan.forex_card_usd)} />
         </div>
-      </div>
+          </div>
+        </TabsContent>
+      </Tabs>
 
     </motion.div>
   );

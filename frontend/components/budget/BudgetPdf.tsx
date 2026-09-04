@@ -7,9 +7,13 @@ import {
   Document, Page, Text, View, StyleSheet, pdf,
 } from "@react-pdf/renderer";
 import type { BudgetResult } from "@/lib/types";
+import type { CashPlanSummary, CashPlanStop } from "@/lib/cashPlan";
 
 const inr = (n: number) => `Rs ${new Intl.NumberFormat("en-IN").format(Math.round(n))}`;
 const usd = (n: number) => `$${n.toFixed(2)}`;
+const foreign = (n: number, currency: string) => `${new Intl.NumberFormat("en-IN", {
+  maximumFractionDigits: currency === "VND" ? 0 : 2,
+}).format(n)} ${currency}`;
 // Helvetica is a standard PDF font with no glyph for "→" — it renders as a stray quote.
 const ascii = (v: string) => v.replace(/→/g, "->");
 
@@ -37,6 +41,19 @@ const s = StyleSheet.create({
   totalRow: { flexDirection: "row", paddingVertical: 4, marginTop: 2, borderTopWidth: 1, borderTopColor: C.fg },
   bold: { fontFamily: "Helvetica-Bold" },
   accent: { color: C.accent, fontFamily: "Helvetica-Bold" },
+  columns: { flexDirection: "row", gap: 8, marginTop: 5 },
+  metric: { flex: 1, padding: 7, backgroundColor: C.band, borderRadius: 4 },
+  metricLabel: { fontSize: 7, color: C.muted, textTransform: "uppercase" },
+  metricValue: { fontSize: 11, fontFamily: "Helvetica-Bold", marginTop: 2 },
+  stop: { paddingVertical: 6, borderBottomWidth: 0.5, borderBottomColor: C.line },
+  stopHead: { flexDirection: "row", alignItems: "center", marginBottom: 3 },
+  stopName: { flex: 1, fontFamily: "Helvetica-Bold", fontSize: 10 },
+  stopRate: { fontSize: 8, color: C.muted },
+  stopGrid: { flexDirection: "row", gap: 8 },
+  stopColumn: { flex: 1 },
+  stopLabel: { fontSize: 7, color: C.muted, textTransform: "uppercase" },
+  stopValue: { fontSize: 8, marginTop: 1 },
+  notice: { paddingVertical: 2, fontSize: 8, color: C.muted },
   footer: { position: "absolute", bottom: 24, left: 36, right: 36, fontSize: 7, color: C.muted, borderTopWidth: 0.5, borderTopColor: C.line, paddingTop: 6 },
 });
 
@@ -60,7 +77,49 @@ function Total({ l, r }: { l: string; r: string }) {
   );
 }
 
-function BudgetDoc({ result, title }: { result: BudgetResult; title: string }) {
+function PdfMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <View style={s.metric}>
+      <Text style={s.metricLabel}>{label}</Text>
+      <Text style={s.metricValue}>{value}</Text>
+    </View>
+  );
+}
+
+function PdfCashStop({ stop }: { stop: CashPlanStop }) {
+  return (
+    <View style={s.stop} wrap={false}>
+      <View style={s.stopHead}>
+        <Text style={s.stopName}>{stop.destination}</Text>
+        <Text style={s.stopRate}>
+          1 USD = {stop.rate_per_usd.toLocaleString("en-IN")} {stop.currency}
+          {stop.rate_source ? `  |  ${stop.rate_source}` : ""}
+          {stop.rate_checked_at ? `  |  ${stop.rate_checked_at}` : ""}
+        </Text>
+      </View>
+      <View style={s.stopGrid}>
+        <View style={s.stopColumn}>
+          <Text style={s.stopLabel}>Arrive with</Text>
+          <Text style={s.stopValue}>{foreign(stop.arrival_cash, stop.currency)}</Text>
+        </View>
+        <View style={s.stopColumn}>
+          <Text style={s.stopLabel}>Exchange locally</Text>
+          <Text style={s.stopValue}>{usd(stop.usd_amount)} -&gt; {foreign(stop.local_from_usd, stop.currency)}</Text>
+        </View>
+        <View style={s.stopColumn}>
+          <Text style={s.stopLabel}>Committed</Text>
+          <Text style={s.stopValue}>{foreign(stop.committed_local, stop.currency)}</Text>
+        </View>
+        <View style={s.stopColumn}>
+          <Text style={s.stopLabel}>Available after</Text>
+          <Text style={s.stopValue}>{foreign(stop.available_after_commitments, stop.currency)}</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function BudgetDoc({ result, title, cashPlan }: { result: BudgetResult; title: string; cashPlan?: CashPlanSummary }) {
   const fc = result.fixed_costs;
   const cc = result.cash_conversion;
   const gt = result.grand_total;
@@ -107,20 +166,68 @@ function BudgetDoc({ result, title }: { result: BudgetResult; title: string }) {
           <Line l="  of which paid on the ground" r={inr(fc.on_ground_total_inr)} />
         </View>
 
-        {/* Cash conversion */}
+        <Text style={s.footer}>
+          Figures are per person. Sightseeing and on-arrival extras are paid from pocket money and are not double-counted.
+        </Text>
+      </Page>
+
+      <Page size="A4" style={s.page}>
+        <Text style={s.h1}>Cash execution plan</Text>
+        <Text style={s.sub}>What to pack, exchange at each destination, and keep in reserve</Text>
+        <Text style={s.meta}>{title}   ·   Generated: {now}   ·   Wayfare</Text>
+
         <View style={s.section}>
-          <Text style={s.sectionTitle}>2. Cash Conversion &amp; Pocket Money</Text>
-          <Line l="Pocket money" m={usd(cc.pocket_money_usd)} r={inr(cc.pocket_money_inr)} />
-          {cc.allocations.map((a, i) => <Line key={i} l={`  ${ascii(a.display)}`} r={inr(a.inr_spent)} />)}
-          <Line l="Remaining on USD / forex card" m={usd(cc.usd_forex_remaining_usd)} r={inr(cc.usd_forex_remaining_inr)} />
-          <Line l="Already committed (sightseeing + on-arrival extras)" r={inr(cc.committed_inr)} boldRow />
-          <Line l="Free to spend" r={inr(cc.free_spend_inr)} boldRow />
+          <Text style={s.sectionTitle}>2. Cash &amp; Pocket Money</Text>
+          <View style={s.columns}>
+            <PdfMetric label="Pocket money" value={usd(cc.pocket_money_usd)} />
+            <PdfMetric label="Committed abroad" value={inr(cc.committed_inr)} />
+            <PdfMetric label="Free to spend" value={inr(cc.free_spend_inr)} />
+          </View>
+
+          <Text style={s.subTitle}>Pack in India</Text>
+          {cc.allocations.map((allocation, index) => (
+            <Line key={index} l={ascii(allocation.display)} r={inr(allocation.inr_spent)} />
+          ))}
+          {cashPlan ? (
+            <>
+              <Line l="Physical USD cash" m={`${cashPlan.usd_notes_100} x $100 + ${cashPlan.usd_notes_50} x $50`} r={usd(cashPlan.physical_usd_cash)} />
+              <Line l="Forex card balance" r={usd(cashPlan.forex_card_usd)} />
+              <Line
+                l="Emergency USD reserve"
+                m={`${cashPlan.reserve_notes_100} x $100 + ${cashPlan.reserve_notes_50} x $50`}
+                r={usd(Math.max(cashPlan.reserve_usd, 0))}
+                boldRow
+              />
+            </>
+          ) : (
+            <Line l="Unconverted USD / forex balance" r={usd(cc.usd_forex_remaining_usd)} />
+          )}
         </View>
 
-        {/* Pacing — only when the trip length or a target is known */}
+        {cashPlan && cashPlan.stops.length > 0 && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>3. Country Plan</Text>
+            {cashPlan.stops.map((stop, index) => <PdfCashStop key={`${stop.destination}-${index}`} stop={stop} />)}
+            <Line
+              l="Projected saving versus buying local cash before departure"
+              r={inr(cashPlan.projected_saving_inr)}
+              boldRow
+            />
+          </View>
+        )}
+
+        {cashPlan && (
+          <View style={s.section}>
+            <Text style={s.sectionTitle}>4. Checks</Text>
+            {cashPlan.notices.map((notice, index) => (
+              <Text key={index} style={s.notice}>[{notice.tone.toUpperCase()}] {notice.text}</Text>
+            ))}
+          </View>
+        )}
+
         {trip && (trip.days > 0 || target) && (
           <View style={s.section}>
-            <Text style={s.sectionTitle}>3. Per Day &amp; Target</Text>
+            <Text style={s.sectionTitle}>5. Per Day &amp; Target</Text>
             {trip.days > 0 && (
               <>
                 <Line l="Trip length" m={trip.start_date && trip.end_date ? `${trip.start_date} -> ${trip.end_date}` : undefined}
@@ -141,24 +248,19 @@ function BudgetDoc({ result, title }: { result: BudgetResult; title: string }) {
                   r={inr(Math.abs(target.delta_inr))}
                   boldRow
                 />
-                {target.crossover_day != null && (
-                  <Line l="Running total passes the target on" r={target.crossover_day === 0 ? "departure" : `day ${target.crossover_day}`} />
-                )}
               </>
             )}
           </View>
         )}
 
         <Text style={s.footer}>
-          Figures are per person. Grand total = prepaid (flights + stays + prepaid extras) + pocket money; sightseeing and
-          on-arrival extras are paid in cash from pocket money and are not double-counted. Generated by Wayfare — always
-          verify prices before booking.
+          Cash exchange results use planning rates and may differ at the counter. Keep physical USD separate from card funds.
         </Text>
       </Page>
     </Document>
   );
 }
 
-export async function generateBudgetPdfBlob(result: BudgetResult, title: string): Promise<Blob> {
-  return pdf(<BudgetDoc result={result} title={title} />).toBlob();
+export async function generateBudgetPdfBlob(result: BudgetResult, title: string, cashPlan?: CashPlanSummary): Promise<Blob> {
+  return pdf(<BudgetDoc result={result} title={title} cashPlan={cashPlan} />).toBlob();
 }

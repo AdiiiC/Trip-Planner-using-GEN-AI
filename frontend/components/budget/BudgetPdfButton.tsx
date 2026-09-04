@@ -4,8 +4,17 @@ import { useState } from "react";
 import { FileDown, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { BudgetResult } from "@/lib/types";
+import type { CashPlanSummary } from "@/lib/cashPlan";
 
-export function BudgetPdfButton({ result, title }: { result: BudgetResult; title?: string }) {
+export function BudgetPdfButton({
+  result,
+  cashPlan,
+  title,
+}: {
+  result: BudgetResult;
+  cashPlan?: CashPlanSummary;
+  title?: string;
+}) {
   const [busy, setBusy] = useState(false);
 
   const download = async () => {
@@ -14,7 +23,7 @@ export function BudgetPdfButton({ result, title }: { result: BudgetResult; title
       const name = (title?.trim() || "Trip Budget");
       // Lazy-load the PDF renderer so it isn't in the initial bundle.
       const { generateBudgetPdfBlob } = await import("./BudgetPdf");
-      const blob = await generateBudgetPdfBlob(result, name);
+      const blob = await generateBudgetPdfBlob(result, name, cashPlan);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -22,7 +31,7 @@ export function BudgetPdfButton({ result, title }: { result: BudgetResult; title
       document.body.appendChild(a);
       a.click();
       a.remove();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
     } catch (e) {
       toast.error(`Could not generate PDF: ${(e as Error).message}`);
     } finally {

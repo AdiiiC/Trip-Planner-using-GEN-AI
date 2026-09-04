@@ -12,7 +12,7 @@ const prodCsp = [
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://upload.wikimedia.org https://commons.wikimedia.org https://logo.clearbit.com https://images.unsplash.com https://source.unsplash.com",
-  "connect-src 'self' https://*.onrender.com https://*.sentry.io https://wft-geo-db.p.rapidapi.com https://photon.komoot.io https://en.wikipedia.org https://app.posthog.com https://us.i.posthog.com",
+  "connect-src 'self' data: https://*.onrender.com https://*.sentry.io https://wft-geo-db.p.rapidapi.com https://photon.komoot.io https://en.wikipedia.org https://app.posthog.com https://us.i.posthog.com",
   "font-src 'self' data:",
   "frame-src 'none'",
   "object-src 'none'",
@@ -23,7 +23,7 @@ const prodCsp = [
 const devCsp = [
   "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: ws: wss: https: http:",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-  "connect-src 'self' ws: wss: https: http:",
+  "connect-src 'self' data: ws: wss: https: http:",
   "img-src 'self' data: blob: https: http:",
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self' data:",
