@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import re
 
+import models
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
-
-import models
 
 MIN_LEN = 3
 MAX_LEN = 20

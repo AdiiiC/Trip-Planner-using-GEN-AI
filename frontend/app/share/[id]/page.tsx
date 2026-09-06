@@ -7,11 +7,11 @@ import { ArrowUpRight, Compass, Sparkles } from "lucide-react";
 import { CityHero } from "@/components/ui/CityHero";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { API_BASE_URL } from "@/lib/config";
 
 async function fetchShare(id: string): Promise<Share | null> {
-  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
   try {
-    const res = await fetch(`${base}/api/share/${encodeURIComponent(id)}`, {
+    const res = await fetch(`${API_BASE_URL}/api/share/${encodeURIComponent(id)}`, {
       cache: "no-store",
     });
     if (!res.ok) return null;

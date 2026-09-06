@@ -8,14 +8,13 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
-
 import models
 from auth_deps import get_current_user
 from auth_schemas import PlanInput, PlanOut, PlanVersionOut
 from db import get_db
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/plans", tags=["plans"])
 
@@ -34,7 +33,7 @@ def _loads(raw: str | None) -> dict | None:
         return None
 
 
-def _to_out(p: models.BudgetPlan) -> PlanOut:
+def _to_out(p: models.BudgetPlan, version_count: int | None = None) -> PlanOut:
     return PlanOut(
         id=p.id,
         name=p.name,
@@ -42,7 +41,9 @@ def _to_out(p: models.BudgetPlan) -> PlanOut:
         result=_loads(p.result),
         total_inr=p.total_inr,
         nights=p.nights,
-        version_count=len(p.versions),
+        # `len(p.versions)` lazy-loads every snapshot row just to count them, which
+        # costs one query per plan in a list. Callers listing plans pass the count in.
+        version_count=len(p.versions) if version_count is None else version_count,
         created_at=p.created_at.isoformat(),
         updated_at=p.updated_at.isoformat(),
     )
@@ -79,7 +80,13 @@ def list_plans(user: models.User = Depends(get_current_user), db: Session = Depe
         .where(models.BudgetPlan.user_id == user.id)
         .order_by(models.BudgetPlan.updated_at.desc())
     ).all()
-    return [_to_out(p) for p in rows]
+    # One grouped count for the whole page instead of one lazy load per plan.
+    counts = dict(db.execute(
+        select(models.PlanVersion.plan_id, func.count(models.PlanVersion.id))
+        .where(models.PlanVersion.plan_id.in_([p.id for p in rows]))
+        .group_by(models.PlanVersion.plan_id)
+    ).all()) if rows else {}
+    return [_to_out(p, counts.get(p.id, 0)) for p in rows]
 
 
 @router.post("", response_model=PlanOut, status_code=201)

@@ -1,7 +1,6 @@
 from datetime import date, timedelta
 
 import pytest
-
 from agents.geospatial import DistanceMatrixInput, GeoPoint, haversine_km
 from agents.travel_intelligence import (
     BookingAdviceInput,

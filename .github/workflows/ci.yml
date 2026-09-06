@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  # ── Backend: Python syntax check ────────────────────────────────────────────
+  # -- Backend: lint + tests --------------------------------------------------
   backend:
     name: Backend (Python)
     runs-on: ubuntu-latest
@@ -16,33 +16,27 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
-
-      - name: Check Python syntax (all .py files)
-        run: |
-          python - <<'EOF'
-          import ast, pathlib, sys
-          errors = []
-          for f in pathlib.Path("backend").rglob("*.py"):
-              try:
-                  ast.parse(f.read_text(encoding="utf-8"))
-              except SyntaxError as e:
-                  errors.append(f"{f}: {e}")
-          if errors:
-              print("\n".join(errors))
-              sys.exit(1)
-          print(f"✓ All {sum(1 for _ in pathlib.Path('backend').rglob('*.py'))} Python files OK")
-          EOF
+          python-version-file: ".python-version"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
 
       - name: Install dependencies
-        run: pip install -r backend/requirements.txt
+        run: pip install -r backend/requirements-dev.txt
+
+      - name: Lint (ruff)
+        run: ruff check backend
 
       - name: Import check (catches missing packages & broken imports)
-        run: |
-          cd backend
-          python -c "import main; print('✓ main.py imports OK')"
+        working-directory: backend
+        run: python -c "import main; print('main.py imports OK')"
 
-  # ── Frontend: TypeScript + build ────────────────────────────────────────────
+      - name: Tests
+        run: pytest
+
+      - name: Dependency vulnerability scan (pip-audit)
+        run: pip-audit --requirement backend/requirements.txt --progress-spinner off
+
+  # -- Frontend: lint + types + build ------------------------------------------
   frontend:
     name: Frontend (Next.js)
     runs-on: ubuntu-latest
@@ -61,8 +55,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Dependency vulnerability scan (npm audit)
+        run: npm audit --audit-level=high
+
+      - name: Lint (eslint)
+        run: npm run lint
+
       - name: TypeScript type check
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Next.js build
         run: npm run build

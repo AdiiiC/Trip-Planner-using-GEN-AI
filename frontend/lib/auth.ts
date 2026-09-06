@@ -6,12 +6,7 @@
 import { create } from "zustand";
 
 import { readToken, writeToken } from "./authToken";
-
-const BASE =
-  process.env.NEXT_PUBLIC_API_URL ??
-  (typeof window !== "undefined" && window.location.hostname !== "localhost"
-    ? ""
-    : "http://localhost:8000");
+import { API_BASE_URL as BASE } from "./config";
 
 export interface AuthUser {
   id: number;

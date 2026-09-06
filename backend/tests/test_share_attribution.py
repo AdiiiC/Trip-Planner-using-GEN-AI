@@ -8,11 +8,10 @@ import tempfile
 # Without Redis the share store falls back to a JSON file in the repo.
 os.environ.setdefault("REDIS_URL", "")
 
-import pytest
-from fastapi.testclient import TestClient
-
 import main
+import pytest
 from db import init_db
+from fastapi.testclient import TestClient
 from main import app
 
 # Send those writes to a scratch file instead.

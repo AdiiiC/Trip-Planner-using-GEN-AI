@@ -1,14 +1,12 @@
 """Saved plans: stored results, version history, restore, and ownership."""
 from __future__ import annotations
 
-import pytest
-from fastapi.testclient import TestClient
-
-from fastapi import FastAPI
-
 import plans_routes
+import pytest
 from auth_routes import router as auth_router
 from db import init_db
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 app = FastAPI()
 app.include_router(auth_router)

@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from "react";
 import { MapPin, Loader2 } from "lucide-react";
+import { API_BASE_URL as BASE, REQUEST_TIMEOUT_MS } from "@/lib/config";
 import { cn } from "@/lib/utils";
 
 interface CityOption {
@@ -17,19 +18,13 @@ interface Props {
   className?: string;
 }
 
-const BASE =
-  process.env.NEXT_PUBLIC_API_URL ??
-  (typeof window !== "undefined" && window.location.hostname !== "localhost"
-    ? ""
-    : "http://localhost:8000");
-
 /**
  * Calls the backend /api/cities proxy — RAPIDAPI_KEY stays server-side, never in the browser.
  */
 async function fetchCities(query: string, k = 7): Promise<CityOption[]> {
   const res = await fetch(
     `${BASE}/api/cities?q=${encodeURIComponent(query)}&k=${k}`,
-    { signal: AbortSignal.timeout(5000) }
+    { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS.autocomplete) }
   );
   if (!res.ok) return [];
   return res.json();

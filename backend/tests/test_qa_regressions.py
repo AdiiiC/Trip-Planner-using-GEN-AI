@@ -2,14 +2,16 @@
 Regression tests for QA bugs fixed in the adversarial audit.
 Run: cd backend && pytest tests/test_qa_regressions.py -v
 """
-import math
 import pytest
-from pydantic import ValidationError
-
 from agents.budget import (
-    BudgetInput, ExchangeRate, FlightCost, CashConversion, calculate_budget,
+    BudgetInput,
+    CashConversion,
+    ExchangeRate,
+    FlightCost,
+    calculate_budget,
 )
-from agents.planner import PlanInput, PackingInput, MultiCityInput, CityStop
+from agents.planner import CityStop, MultiCityInput, PlanInput
+from pydantic import ValidationError
 
 
 class TestBUG001_ZeroDivisionError:

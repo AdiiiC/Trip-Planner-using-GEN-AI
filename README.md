@@ -222,8 +222,8 @@ TripMind/
 
 | Tool | Version |
 |------|---------|
-| Python | 3.10+ |
-| Node.js | 18+ |
+| Python | 3.12 (see `.python-version`) |
+| Node.js | 20+ |
 | Groq API key | [console.groq.com](https://console.groq.com) — free |
 | Serper API key | [serper.dev](https://serper.dev) — free tier |
 | Exa API key | [exa.ai](https://exa.ai) — free tier |
@@ -282,9 +282,35 @@ npm run dev
 ### 3 — Tests
 
 ```bash
-cd backend
-pytest tests/ -q
+pytest                 # from the repo root — config lives in pyproject.toml
+cd backend && pytest   # equivalent, if you prefer working inside backend/
 ```
+
+### 4 — Code quality
+
+Linting and formatting are configured once in `pyproject.toml` (backend) and
+`.prettierrc` + `eslint.config.mjs` (frontend). CI runs the same commands, so a
+clean local run means a green build.
+
+```bash
+# Backend — Ruff replaces flake8 + isort + black
+pip install -r backend/requirements-dev.txt
+ruff check backend          # lint
+ruff check backend --fix    # lint + autofix
+ruff format backend         # format
+
+# Frontend
+cd frontend
+npm run lint                # ESLint (next/core-web-vitals + TypeScript)
+npm run typecheck           # tsc --noEmit
+npm run format              # Prettier, with Tailwind class sorting
+npm run format:check        # verify only — what CI runs
+```
+
+> **Configuration lives in exactly one place per side.** Backend settings are
+> declared and validated in `backend/config.py` (`from config import settings`);
+> frontend runtime values live in `frontend/lib/config.ts`. Add new values there
+> rather than reaching for `process.env` or a literal inside a component.
 
 ---
 

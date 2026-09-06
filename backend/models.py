@@ -2,12 +2,11 @@
 and the short-lived tokens behind password reset / email verification."""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from datetime import UTC, datetime
 
 from db import Base
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, func
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 # Token purposes for `AuthToken.purpose`.
 PURPOSE_PASSWORD_RESET = "password_reset"
@@ -15,7 +14,7 @@ PURPOSE_EMAIL_VERIFY = "email_verify"
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class User(Base):
@@ -39,9 +38,9 @@ class User(Base):
     password_changed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at:    Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
-    plans:          Mapped[list["BudgetPlan"]]   = relationship(back_populates="user", cascade="all, delete-orphan")
-    recovery_codes: Mapped[list["RecoveryCode"]] = relationship(back_populates="user", cascade="all, delete-orphan")
-    tokens:         Mapped[list["AuthToken"]]    = relationship(back_populates="user", cascade="all, delete-orphan")
+    plans:          Mapped[list[BudgetPlan]]   = relationship(back_populates="user", cascade="all, delete-orphan")
+    recovery_codes: Mapped[list[RecoveryCode]] = relationship(back_populates="user", cascade="all, delete-orphan")
+    tokens:         Mapped[list[AuthToken]]    = relationship(back_populates="user", cascade="all, delete-orphan")
 
 
 # "aadhi_123" and "Aadhi_123" must not be two different accounts. NULLs stay
@@ -64,8 +63,8 @@ class BudgetPlan(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
 
-    user:     Mapped["User"] = relationship(back_populates="plans")
-    versions: Mapped[list["PlanVersion"]] = relationship(
+    user:     Mapped[User] = relationship(back_populates="plans")
+    versions: Mapped[list[PlanVersion]] = relationship(
         back_populates="plan", cascade="all, delete-orphan", order_by="PlanVersion.created_at.desc()"
     )
 
@@ -81,7 +80,7 @@ class PlanVersion(Base):
     total_inr:  Mapped[float | None] = mapped_column(Float, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
-    plan: Mapped["BudgetPlan"] = relationship(back_populates="versions")
+    plan: Mapped[BudgetPlan] = relationship(back_populates="versions")
 
 
 class RecoveryCode(Base):
@@ -92,7 +91,7 @@ class RecoveryCode(Base):
     code_hash: Mapped[str]  = mapped_column(String(255), nullable=False)
     used:      Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-    user: Mapped["User"] = relationship(back_populates="recovery_codes")
+    user: Mapped[User] = relationship(back_populates="recovery_codes")
 
 
 class AuthToken(Base):
@@ -110,4 +109,4 @@ class AuthToken(Base):
     used_at:    Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
-    user: Mapped["User"] = relationship(back_populates="tokens")
+    user: Mapped[User] = relationship(back_populates="tokens")

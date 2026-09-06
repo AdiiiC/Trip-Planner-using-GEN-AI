@@ -3,8 +3,9 @@ from __future__ import annotations
 import math
 import re
 from datetime import date
+from typing import Literal, NamedTuple
+
 from pydantic import BaseModel, Field, field_validator
-from typing import Literal
 
 _CURRENCY_RE = r"^[A-Za-z]{2,4}$"
 _MAX_MONEY   = 1e12   # sanity cap: no single item > 1 trillion INR
@@ -141,8 +142,8 @@ def _settle(members: list[str], charges: list[tuple[str, float, float]]) -> dict
     it is only reported as the unattributed total.
     """
     lookup = {m.lower(): m for m in members}
-    paid = {m: 0.0 for m in members}
-    owed = {m: 0.0 for m in members}
+    paid = dict.fromkeys(members, 0.0)
+    owed = dict.fromkeys(members, 0.0)
     group_total = unattributed = 0.0
 
     for payer, group_cost, share in charges:
@@ -194,165 +195,283 @@ def _settle(members: list[str], charges: list[tuple[str, float, float]]) -> dict
 # Calculator
 # ──────────────────────────────────────────────
 
-def calculate_budget(inp: BudgetInput) -> dict:
-    # Build INR rate lookup  (always include INR = 1)
-    rates: dict[str, float] = {r.currency: r.rate_to_inr for r in inp.exchange_rates}
-    rates.setdefault("INR", 1.0)
-    usd_rate = rates.get("USD", 83.0)
+# ──────────────────────────────────────────────
+# Currency
+# ──────────────────────────────────────────────
 
-    def to_inr(amount: float, currency: str) -> float:
-        rate = rates.get(currency, 1.0)
-        if rate <= 0 or not math.isfinite(rate):   # BUG-001: guard zero/inf/nan
-            rate = 1.0
-        return amount * rate
+class RateTable:
+    """INR conversion rates, hardened against the values a form can actually send.
 
-    # Group ledger: only worth tracking with a party of two or more. Each charge
-    # records what the whole party owes and what one member's slice of it is.
-    party = inp.party
-    group_mode = len(party) >= 2
-    charges: list[tuple[str, float, float]] = []
+    A zero, negative, or non-finite rate is treated as 1.0 rather than allowed to
+    poison every downstream total with an inf/nan.
+    """
 
-    def charge_each(payer: str, per_person: float) -> None:
-        """A cost every traveller carries (tickets, entry fees)."""
-        if group_mode:
-            charges.append((payer, per_person * len(party), per_person))
+    _DEFAULT_USD_TO_INR = 83.0
 
-    def charge_shared(payer: str, total: float) -> None:
-        """One bill for the whole party (a room, a taxi)."""
-        if group_mode:
-            charges.append((payer, total, total / len(party)))
+    def __init__(self, rates: list[ExchangeRate]) -> None:
+        self._rates = {r.currency: r.rate_to_inr for r in rates}
+        self._rates.setdefault("INR", 1.0)
 
-    # ── 1. Flights ──────────────────────────────
-    flight_items, total_flights = [], 0.0
-    for f in inp.flights:
-        flight_items.append({"route": f.route, "amount_inr": round(f.price_inr, 2), "date": f.date})
-        total_flights += f.price_inr
-        (charge_each if f.per_person else charge_shared)(f.paid_by, f.price_inr)
+    def rate_for(self, currency: str) -> float:
+        rate = self._rates.get(currency, 1.0)
+        return rate if rate > 0 and math.isfinite(rate) else 1.0
 
-    # ── 2. Accommodation ────────────────────────
-    stay_items, total_stays = [], 0.0
-    for s in inp.accommodations:
+    def to_inr(self, amount: float, currency: str) -> float:
+        return amount * self.rate_for(currency)
+
+    @property
+    def usd_to_inr(self) -> float:
+        return self._rates.get("USD", self._DEFAULT_USD_TO_INR)
+
+    def to_usd(self, amount_inr: float) -> float:
+        return amount_inr / self.usd_to_inr if self.usd_to_inr else 0.0
+
+    def as_dict(self) -> dict[str, float]:
+        """Rates actually applied, excluding the trivial INR→INR identity."""
+        return {k: v for k, v in self._rates.items() if k != "INR"}
+
+
+# ──────────────────────────────────────────────
+# Group ledger
+# ──────────────────────────────────────────────
+
+class GroupLedger:
+    """Records who fronted which bill while the costs are being totalled.
+
+    Below two members there is nothing to settle, so the ledger quietly accepts
+    every charge and reports itself as inactive. That lets the calculator record
+    charges unconditionally instead of guarding each call site.
+    """
+
+    def __init__(self, party: list[str]) -> None:
+        self._party = party
+        self._charges: list[tuple[str, float, float]] = []
+
+    @property
+    def is_active(self) -> bool:
+        return len(self._party) >= 2
+
+    def add_per_person_charge(self, payer: str, per_person_inr: float) -> None:
+        """A cost every traveller carries — tickets, entry fees."""
+        if self.is_active:
+            self._charges.append((payer, per_person_inr * len(self._party), per_person_inr))
+
+    def add_shared_charge(self, payer: str, total_inr: float) -> None:
+        """One bill for the whole party — a room, a taxi."""
+        if self.is_active:
+            self._charges.append((payer, total_inr, total_inr / len(self._party)))
+
+    def settle(self) -> dict | None:
+        return _settle(self._party, self._charges) if self.is_active else None
+
+
+# ──────────────────────────────────────────────
+# Cost categories — each returns (line items, total INR)
+# ──────────────────────────────────────────────
+
+def _total_flights(flights: list[FlightCost], ledger: GroupLedger) -> tuple[list[dict], float]:
+    items, total = [], 0.0
+    for f in flights:
+        items.append({"route": f.route, "amount_inr": round(f.price_inr, 2), "date": f.date})
+        total += f.price_inr
+        record = ledger.add_per_person_charge if f.per_person else ledger.add_shared_charge
+        record(f.paid_by, f.price_inr)
+    return items, total
+
+
+def _total_stays(
+    stays: list[AccommodationCost], travelers: int, ledger: GroupLedger
+) -> tuple[list[dict], float]:
+    """Totals are per person: a group booking is divided by the head count."""
+    items, total = [], 0.0
+    for s in stays:
         if s.split_type == "individual":
-            per_person = s.total_cost_inr
-            label = "Individual"
-            charge_each(s.paid_by, s.total_cost_inr)
+            per_person, label = s.total_cost_inr, "Individual"
+            ledger.add_per_person_charge(s.paid_by, s.total_cost_inr)
         else:
-            per_person = s.total_cost_inr / max(inp.travelers, 1)  # BUG-001: guard /0
-            label = f"÷{inp.travelers}"
-            charge_shared(s.paid_by, s.total_cost_inr)
-        stay_items.append({
+            per_person = s.total_cost_inr / max(travelers, 1)
+            label = f"÷{travelers}"
+            ledger.add_shared_charge(s.paid_by, s.total_cost_inr)
+        items.append({
             "destination": s.destination,
             "booking_total_inr": round(s.total_cost_inr, 2),
             "per_person_inr": round(per_person, 2),
             "split": label,
         })
-        total_stays += per_person
+        total += per_person
+    return items, total
 
-    # ── 3. Sightseeing ──────────────────────────
-    sight_items, total_sightseeing = [], 0.0
-    for s in inp.sightseeing:
-        inr = to_inr(s.amount, s.currency)
-        sight_items.append({
+
+def _total_sightseeing(
+    sightseeing: list[ItemCost], rates: RateTable, ledger: GroupLedger
+) -> tuple[list[dict], float]:
+    items, total = [], 0.0
+    for s in sightseeing:
+        inr = rates.to_inr(s.amount, s.currency)
+        items.append({
             "destination": s.destination,
             "name": s.name,
             "original": f"{s.amount:,.0f} {s.currency}",
             "amount_inr": round(inr, 2),
         })
-        total_sightseeing += inr
-        charge_each(s.paid_by, inr)
+        total += inr
+        ledger.add_per_person_charge(s.paid_by, inr)
+    return items, total
 
-    # ── 4. Extras (prepaid at home vs paid on arrival) ─────────
-    extra_items, total_extras = [], 0.0
-    prepaid_extras, onground_extras = 0.0, 0.0
-    for e in inp.extras:
-        inr = to_inr(e.amount, e.currency)
-        is_prepaid = e.prepaid if e.prepaid is not None else bool(_PREPAID_HINT.search(e.name))
-        extra_items.append({
+
+def _is_prepaid(extra: ItemCost) -> bool:
+    """An explicit flag always wins; otherwise the name is the only signal we have."""
+    if extra.prepaid is not None:
+        return extra.prepaid
+    return bool(_PREPAID_HINT.search(extra.name))
+
+
+class ExtrasTotals(NamedTuple):
+    items: list[dict]
+    total_inr: float
+    prepaid_inr: float
+    on_ground_inr: float
+
+
+def _total_extras(extras: list[ItemCost], rates: RateTable, ledger: GroupLedger) -> ExtrasTotals:
+    """Extras split by *when* they are paid, which decides what pocket money must cover."""
+    items: list[dict] = []
+    total = prepaid = on_ground = 0.0
+    for e in extras:
+        inr = rates.to_inr(e.amount, e.currency)
+        prepaid_here = _is_prepaid(e)
+        items.append({
             "name": e.name,
             "destination": e.destination,
             "original": f"{e.amount:,.0f} {e.currency}",
             "amount_inr": round(inr, 2),
-            "prepaid": is_prepaid,
+            "prepaid": prepaid_here,
         })
-        total_extras += inr
-        charge_each(e.paid_by, inr)
-        if is_prepaid:
-            prepaid_extras += inr
+        total += inr
+        ledger.add_per_person_charge(e.paid_by, inr)
+        if prepaid_here:
+            prepaid += inr
         else:
-            onground_extras += inr
+            on_ground += inr
+    return ExtrasTotals(items, total, prepaid, on_ground)
 
-    total_fixed = total_flights + total_stays + total_sightseeing + total_extras
 
-    # Prepaid = money that leaves before departure; sightseeing and on-arrival
-    # extras are paid on the ground out of pocket money, so they must NOT be
-    # added on top of it (that was the old double-count).
-    prepaid_total = total_flights + total_stays + prepaid_extras
-    committed_inr = total_sightseeing + onground_extras
-
-    # ── 5. Cash conversion ──────────────────────
-    pocket_money_inr = inp.pocket_money_usd * usd_rate
-    cash_items, total_cash_out = [], 0.0
-    for c in inp.cash_conversions:
-        rate = rates.get(c.currency, 1.0)
-        if rate <= 0 or not math.isfinite(rate):   # BUG-001: guard zero rate
-            rate = 1.0
-        foreign = c.amount_inr / rate
-        cash_items.append({
+def _allocate_cash(
+    conversions: list[CashConversion], rates: RateTable
+) -> tuple[list[dict], float]:
+    items, total_inr = [], 0.0
+    for c in conversions:
+        foreign = c.amount_inr / rates.rate_for(c.currency)
+        items.append({
             "currency": c.currency,
             "inr_spent": round(c.amount_inr, 2),
             "foreign_amount": round(foreign, 0),
             "display": f"{foreign:,.0f} {c.currency}",
         })
-        total_cash_out += c.amount_inr
+        total_inr += c.amount_inr
+    return items, total_inr
 
-    usd_remaining_inr = pocket_money_inr - total_cash_out
-    usd_remaining = usd_remaining_inr / usd_rate if usd_rate else 0.0
 
-    free_spend_inr = pocket_money_inr - committed_inr   # genuinely left after committed cash
+# ──────────────────────────────────────────────
+# Pacing and target
+# ──────────────────────────────────────────────
 
-    # ── 6. Grand total (true money to mobilize) ─
-    # prepaid (flights + stays + prepaid extras) + cash carried, with no item
-    # counted twice.
-    grand_inr = prepaid_total + pocket_money_inr
-    grand_usd = grand_inr / usd_rate if usd_rate else 0.0
-
-    # ── 7. Trip length → pacing ─────────────────
+def _build_pacing(
+    inp: BudgetInput,
+    *,
+    grand_inr: float,
+    prepaid_total: float,
+    pocket_money_inr: float,
+    free_spend_inr: float,
+    total_stays: float,
+) -> dict:
     nights, start_iso, end_iso = _resolve_nights(inp)
     days = nights + 1 if nights else 0   # a 5-night trip spends money on 6 days
-    trip = {
+
+    def per_day(amount: float) -> float:
+        return round(amount / days, 2) if days else 0.0
+
+    return {
         "nights": nights,
         "days": days,
         "start_date": start_iso,
         "end_date": end_iso,
-        "per_day_all_in_inr":   round(grand_inr / days, 2) if days else 0.0,
-        "per_day_on_ground_inr": round(pocket_money_inr / days, 2) if days else 0.0,
-        "per_day_free_inr":     round(free_spend_inr / days, 2) if days else 0.0,
-        "per_night_stay_inr":   round(total_stays / nights, 2) if nights else 0.0,
-        "burn_down":            _burn_down(days, prepaid_total, pocket_money_inr, inp.budget_target_inr),
+        "per_day_all_in_inr": per_day(grand_inr),
+        "per_day_on_ground_inr": per_day(pocket_money_inr),
+        "per_day_free_inr": per_day(free_spend_inr),
+        "per_night_stay_inr": round(total_stays / nights, 2) if nights else 0.0,
+        "burn_down": _burn_down(days, prepaid_total, pocket_money_inr, inp.budget_target_inr),
     }
 
-    # ── 8. Target ───────────────────────────────
-    target_amount = inp.budget_target_inr
-    if target_amount > 0:
-        per_day_target = target_amount / days if days else 0.0
-        over_by = grand_inr - target_amount
-        # Which day the running total crosses the target (None if it never does).
-        crossover = next(
-            (row["day"] for row in trip["burn_down"] if row["cumulative_inr"] > target_amount), None
-        )
-        target = {
-            "amount_inr":     round(target_amount, 2),
-            "delta_inr":      round(over_by, 2),
-            "pct_used":       round(grand_inr / target_amount * 100, 1),
-            "status":         "over" if over_by > 0 else "under",
-            "per_day_inr":    round(per_day_target, 2),
-            "daily_delta_pct": (
-                round((trip["per_day_all_in_inr"] / per_day_target - 1) * 100, 1) if per_day_target else 0.0
-            ),
-            "crossover_day":  crossover,
-        }
-    else:
-        target = None
+
+def _compare_to_target(target_inr: float, grand_inr: float, trip: dict) -> dict | None:
+    """How the plan measures against a ceiling, or None when no ceiling was set."""
+    if target_inr <= 0:
+        return None
+
+    days = trip["days"]
+    per_day_target = target_inr / days if days else 0.0
+    over_by = grand_inr - target_inr
+    crossover = next(
+        (row["day"] for row in trip["burn_down"] if row["cumulative_inr"] > target_inr), None
+    )
+    return {
+        "amount_inr": round(target_inr, 2),
+        "delta_inr": round(over_by, 2),
+        "pct_used": round(grand_inr / target_inr * 100, 1),
+        "status": "over" if over_by > 0 else "under",
+        "per_day_inr": round(per_day_target, 2),
+        "daily_delta_pct": (
+            round((trip["per_day_all_in_inr"] / per_day_target - 1) * 100, 1)
+            if per_day_target else 0.0
+        ),
+        "crossover_day": crossover,
+    }
+
+
+# ──────────────────────────────────────────────
+# Calculator
+# ──────────────────────────────────────────────
+
+def calculate_budget(inp: BudgetInput) -> dict:
+    """Total a trip, pace it across the days, and settle the group ledger.
+
+    Reads as the arithmetic it is: total each category, work out what is spent
+    before departure versus on the ground, then derive pacing and the target
+    comparison from those two numbers.
+    """
+    rates = RateTable(inp.exchange_rates)
+    ledger = GroupLedger(inp.party)
+
+    flight_items, total_flights = _total_flights(inp.flights, ledger)
+    stay_items, total_stays = _total_stays(inp.accommodations, inp.travelers, ledger)
+    sight_items, total_sightseeing = _total_sightseeing(inp.sightseeing, rates, ledger)
+    extras = _total_extras(inp.extras, rates, ledger)
+
+    total_fixed = total_flights + total_stays + total_sightseeing + extras.total_inr
+
+    # Prepaid = money that leaves before departure; sightseeing and on-arrival
+    # extras are paid on the ground out of pocket money, so they must NOT be
+    # added on top of it (that was the old double-count).
+    prepaid_total = total_flights + total_stays + extras.prepaid_inr
+    committed_inr = total_sightseeing + extras.on_ground_inr
+
+    pocket_money_inr = inp.pocket_money_usd * rates.usd_to_inr
+    cash_items, total_cash_out = _allocate_cash(inp.cash_conversions, rates)
+    usd_remaining_inr = pocket_money_inr - total_cash_out
+    free_spend_inr = pocket_money_inr - committed_inr   # genuinely left after committed cash
+
+    # True money to mobilize: prepaid + cash carried, with no item counted twice.
+    grand_inr = prepaid_total + pocket_money_inr
+
+    trip = _build_pacing(
+        inp,
+        grand_inr=grand_inr,
+        prepaid_total=prepaid_total,
+        pocket_money_inr=pocket_money_inr,
+        free_spend_inr=free_spend_inr,
+        total_stays=total_stays,
+    )
 
     return {
         "travelers": inp.travelers,
@@ -360,9 +479,9 @@ def calculate_budget(inp: BudgetInput) -> dict:
             "flights":     {"items": flight_items,  "total_inr": round(total_flights, 2)},
             "stays":       {"items": stay_items,    "total_inr": round(total_stays, 2)},
             "sightseeing": {"items": sight_items,   "total_inr": round(total_sightseeing, 2)},
-            "extras":      {"items": extra_items,   "total_inr": round(total_extras, 2)},
+            "extras":      {"items": extras.items,  "total_inr": round(extras.total_inr, 2)},
             "total_inr": round(total_fixed, 2),
-            "total_usd": round(total_fixed / usd_rate, 2) if usd_rate else 0.0,
+            "total_usd": round(rates.to_usd(total_fixed), 2),
             "prepaid_total_inr":   round(prepaid_total, 2),
             "on_ground_total_inr": round(committed_inr, 2),
         },
@@ -372,18 +491,18 @@ def calculate_budget(inp: BudgetInput) -> dict:
             "allocations":           cash_items,
             "total_cash_out_inr":    round(total_cash_out, 2),
             "usd_forex_remaining_inr": round(usd_remaining_inr, 2),
-            "usd_forex_remaining_usd": round(usd_remaining, 2),
+            "usd_forex_remaining_usd": round(rates.to_usd(usd_remaining_inr), 2),
             "committed_inr":         round(committed_inr, 2),
             "free_spend_inr":        round(free_spend_inr, 2),
         },
         "grand_total": {
             "inr": round(grand_inr, 2),
-            "usd": round(grand_usd, 2),
+            "usd": round(rates.to_usd(grand_inr), 2),
             "prepaid_inr":      round(prepaid_total, 2),
             "pocket_money_inr": round(pocket_money_inr, 2),
         },
         "trip": trip,
-        "target": target,
-        "settlement": _settle(party, charges) if group_mode else None,
-        "rates_used": {k: v for k, v in rates.items() if k != "INR"},
+        "target": _compare_to_target(inp.budget_target_inr, grand_inr, trip),
+        "settlement": ledger.settle(),
+        "rates_used": rates.as_dict(),
     }

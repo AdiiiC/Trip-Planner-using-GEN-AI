@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { API_BASE_URL } from "@/lib/config";
 
 export const runtime = "edge";
 export const alt = "Wayfare — Shared Trip";
@@ -13,9 +14,8 @@ interface Share {
 }
 
 async function fetchShare(id: string): Promise<Share | null> {
-  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
   try {
-    const res = await fetch(`${base}/api/share/${encodeURIComponent(id)}`, {
+    const res = await fetch(`${API_BASE_URL}/api/share/${encodeURIComponent(id)}`, {
       cache: "no-store",
     });
     if (!res.ok) return null;
@@ -26,10 +26,9 @@ async function fetchShare(id: string): Promise<Share | null> {
 }
 
 async function fetchCityPhoto(city: string, country: string): Promise<string | null> {
-  const base = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8001";
   const qs = new URLSearchParams({ city, ...(country ? { country } : {}) }).toString();
   try {
-    const res = await fetch(`${base}/api/city-photo?${qs}`, { cache: "no-store" });
+    const res = await fetch(`${API_BASE_URL}/api/city-photo?${qs}`, { cache: "no-store" });
     if (!res.ok) return null;
     const data = await res.json();
     return data.url ?? null;

@@ -1,0 +1,12 @@
+# Development-only tooling. Runtime dependencies live in requirements.txt.
+#
+#   pip install -r backend/requirements-dev.txt
+#
+# Config for all of these is centralised in the repo-root pyproject.toml.
+
+-r requirements.txt
+
+ruff>=0.9.0          # linter + formatter (replaces flake8, isort, black, pyupgrade)
+mypy>=1.14.0         # type checking
+pytest-cov>=6.0.0    # coverage reporting
+pip-audit>=2.7.0     # dependency CVE scanning (runs in CI)

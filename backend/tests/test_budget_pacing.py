@@ -1,12 +1,12 @@
 """Trip pacing, budget target and the group settle-up ledger."""
 from __future__ import annotations
 
-import sys
 import pathlib
+import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from agents.budget import BudgetInput, calculate_budget  # noqa: E402
+from agents.budget import BudgetInput, calculate_budget
 
 
 def _base(**overrides) -> BudgetInput:

@@ -22,17 +22,12 @@ import type {
   PlaceDistance,
 } from "./types";
 import { authHeader } from "./authToken";
+import { API_BASE_URL as BASE, CACHE_TTL_MS, STORAGE_KEYS } from "./config";
 
-const BASE =
-  process.env.NEXT_PUBLIC_API_URL ??
-  (typeof window !== "undefined" && window.location.hostname !== "localhost"
-    ? ""        // same-origin fallback when self-hosted
-    : "http://localhost:8000");
-
-// ── sessionStorage TTL cache (10 min) ────────────────────────────────────────
+// ── sessionStorage TTL cache ─────────────────────────────────────────────────
 // Prevents identical queries from re-hitting the backend within a session.
 
-const CACHE_TTL = 10 * 60 * 1000;
+const CACHE_TTL = CACHE_TTL_MS.session;
 
 function getCached<T>(key: string): T | null {
   if (typeof window === "undefined") return null;

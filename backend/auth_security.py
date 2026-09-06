@@ -4,14 +4,13 @@ from __future__ import annotations
 import base64
 import hashlib
 import secrets
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 import pyotp
+from config import settings
 from cryptography.fernet import Fernet, InvalidToken
 from passlib.context import CryptContext
-
-from config import settings
 
 _pwd = CryptContext(schemes=["argon2"], deprecated="auto")
 
@@ -36,7 +35,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 # ── JWT ───────────────────────────────────────────────────────────────────────
 
 def _encode(sub: str, scope: str, ttl: int) -> str:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {"sub": sub, "scope": scope, "iat": now, "exp": now + timedelta(seconds=ttl)}
     return jwt.encode(payload, settings.jwt_secret, algorithm="HS256")
 
@@ -63,7 +62,7 @@ def decode_token_claims(token: str, expected_scope: str) -> tuple[int, datetime]
         return None
     try:
         user_id = int(payload["sub"])
-        issued_at = datetime.fromtimestamp(int(payload["iat"]), tz=timezone.utc)
+        issued_at = datetime.fromtimestamp(int(payload["iat"]), tz=UTC)
     except (KeyError, ValueError, TypeError, OverflowError, OSError):
         return None
     return user_id, issued_at

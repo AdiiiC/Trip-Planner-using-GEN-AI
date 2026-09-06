@@ -52,7 +52,7 @@ def send_email(to: str, subject: str, body_text: str, body_html: str | None = No
 
     try:
         _deliver(message)
-    except Exception as exc:  # noqa: BLE001 — any transport error is just "not sent"
+    except Exception as exc:
         logger.warning("email send failed (%s): %s", subject, exc)
         return False
     return True

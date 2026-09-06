@@ -3,19 +3,25 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
+import time
 import uuid
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+from urllib.parse import quote, quote_plus
 
 import httpx
+import sentry_sdk
 from dotenv import load_dotenv
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
+from starlette.datastructures import MutableHeaders
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
-import sentry_sdk
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 load_dotenv()
 
@@ -29,8 +35,23 @@ if settings.sentry_dsn:
         traces_sample_rate=0.0,
     )
 
+from agents.attraction_price import AttractionPriceInput, get_attraction_price
+from agents.best_time import BestTimeInput, best_time_to_visit
 from agents.budget import BudgetInput, calculate_budget
+from agents.cash_predict import CashPredictInput, predict_cash
+from agents.currency import ConvertInput, convert_currency
+from agents.export import ExportInput, build_ics
+from agents.extract_costs import ExtractCostsInput, extract_costs
 from agents.flights import FlightSearchInput, search_flights
+from agents.forex import HEADLINE_CURRENCIES, fetch_inr_rates
+from agents.geospatial import (
+    DistanceMatrixInput,
+    PlaceSearchInput,
+    ReverseGeocodeInput,
+    distance_matrix,
+    reverse_geocode,
+    search_places,
+)
 from agents.hotels import HotelSearchInput, search_hotels
 from agents.insurance import InsuranceInput, estimate_insurance
 from agents.planner import (
@@ -46,33 +67,20 @@ from agents.planner import (
     refine_itinerary,
 )
 from agents.restaurants import RestaurantInput, find_restaurants
+from agents.route import OptimizeRouteInput, optimize_route
 from agents.sightseeing import SightseeingInput, explore_sightseeing
+from agents.travel_intelligence import IntelligenceRequest, analyze
 from agents.visa_check import VisaCheckInput, check_visa
 from agents.weather import WeatherInput, get_weather
-from agents.currency import ConvertInput, convert_currency
-from agents.extract_costs import ExtractCostsInput, extract_costs
-from agents.route import OptimizeRouteInput, optimize_route
-from agents.export import ExportInput, build_ics
-from agents.best_time import BestTimeInput, best_time_to_visit
-from agents.cash_predict import CashPredictInput, predict_cash
-from agents.attraction_price import AttractionPriceInput, get_attraction_price
-from agents.geospatial import (
-    DistanceMatrixInput,
-    PlaceSearchInput,
-    ReverseGeocodeInput,
-    distance_matrix,
-    reverse_geocode,
-    search_places,
-)
-from agents.travel_intelligence import IntelligenceRequest, analyze
-
-from db import init_db
 from auth_routes import router as auth_router
+from auth_security import decode_token
+from db import check_database, init_db
+from observability import configure_logging, metrics, request_id_var, user_id_var
 from plans_routes import router as plans_router
 
-# ── logging ──────────────────────────────────────────────────────────────────
+# ── logging ───────────────────────────────────────────────────────────
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+configure_logging(json_output=settings.log_format == "json")
 logger = logging.getLogger(__name__)
 
 # ── rate limiter ─────────────────────────────────────────────────────────────
@@ -81,7 +89,23 @@ from rate_limit import limiter
 
 # ── app ───────────────────────────────────────────────────────────────────────
 
-app = FastAPI(title="Trip Planner API", version="2.0.0")
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    # Fail fast rather than serving traffic with a forgeable JWT signing key.
+    if settings.is_production:
+        settings.assert_production_ready()
+    else:
+        for problem in settings.insecure_settings():
+            logger.warning("insecure setting", extra={"problem": problem})
+    # Not fatal: one instance with these settings is fine. Logged so that the
+    # reason is already in the log when someone scales to two and things go odd.
+    for constraint in settings.single_instance_constraints():
+        logger.warning("single-instance constraint", extra={"constraint": constraint})
+    init_db()
+    yield
+
+
+app = FastAPI(title="Trip Planner API", version="2.0.0", lifespan=lifespan)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
@@ -126,36 +150,116 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
-class RequestIDMiddleware(BaseHTTPMiddleware):
-    """Echoes or generates a X-Request-ID header for every response.
-    Makes it easy to correlate client errors with Render/server logs."""
-    async def dispatch(self, request: Request, call_next) -> Response:
+class RequestContextMiddleware:
+    """Correlates, times and records every request.
+
+    The id was previously generated and returned to the client but never logged,
+    so the X-Request-ID a user quotes from a failed response matched nothing on
+    the server. It now goes into a ContextVar that the JSON formatter stamps onto
+    every log line emitted while handling that request.
+
+    Written as raw ASGI rather than BaseHTTPMiddleware on purpose. BaseHTTPMiddleware
+    runs the endpoint in a separate anyio task, so a ContextVar set down in a
+    dependency (`user_id_var` in `get_current_user`) is set in a *copy* of the
+    context and is empty again by the time the middleware logs. Raw ASGI stays in
+    one context, so the summary line below actually carries the user id.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        request = Request(scope)
         req_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
-        response = await call_next(request)
-        response.headers["X-Request-ID"] = req_id
-        return response
+        request_id_var.set(req_id)
+        user_id_var.set(_log_user_id(request))
+        started = time.perf_counter()
+        status = 500
+
+        async def send_wrapper(message: Message) -> None:
+            nonlocal status
+            if message["type"] == "http.response.start":
+                status = message["status"]
+                headers = MutableHeaders(scope=message)
+                headers["X-Request-ID"] = req_id
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_wrapper)
+        except Exception:
+            duration_ms = (time.perf_counter() - started) * 1000
+            logger.exception(
+                "request failed",
+                extra={"method": request.method, "route": _route_label(scope),
+                       "path": request.url.path, "status": 500,
+                       "duration_ms": round(duration_ms, 1)},
+            )
+            metrics.record_request(_route_label(scope), 500, duration_ms)
+            raise
+
+        duration_ms = (time.perf_counter() - started) * 1000
+        # The path template ("/api/share/{share_id}"), not the filled-in path, so
+        # latency for one endpoint isn't split across unbounded distinct labels.
+        label = _route_label(scope)
+        metrics.record_request(label, status, duration_ms)
+        logger.log(
+            logging.WARNING if status >= 500 else logging.INFO,
+            "request",
+            extra={
+                "method": request.method,
+                "route": label,
+                "path": request.url.path,
+                "status": status,
+                "duration_ms": round(duration_ms, 1),
+            },
+        )
 
 
-app.add_middleware(RequestIDMiddleware)
+def _route_label(scope: Scope) -> str:
+    route = scope.get("route")
+    return getattr(route, "path", None) or scope.get("path", "unknown")
+
+
+def _log_user_id(request: Request) -> str:
+    """Best-effort user id for log attribution only -- never for authorisation.
+
+    Resolved here rather than in `get_current_user` because that dependency is a
+    sync `def`, so FastAPI runs it in a threadpool with a *copy* of the context;
+    a ContextVar set there is discarded and never reaches the handler or this
+    middleware. Setting it at the top of the request puts it in the context that
+    everything downstream is copied from.
+
+    The signature is still verified (`decode_token` returns None otherwise), so a
+    forged token cannot attribute log lines to someone else's account.
+    """
+    header = request.headers.get("Authorization", "")
+    if not header.startswith("Bearer "):
+        return ""
+    user_id = decode_token(header[7:], "access")
+    return str(user_id) if user_id else ""
+
+
+app.add_middleware(RequestContextMiddleware)
 app.add_middleware(SecurityHeadersMiddleware)
 
 # ── CORS ─────────────────────────────────────────────────────────────────────
-# allow_origins=["*"] — CORS origin restriction is a browser hint, not real security.
-# Real protection is: rate limiting + server-side API keys + input validation.
+# Origins come from ALLOWED_ORIGINS (see config.cors_origins). A wildcard was
+# used here previously; it let any site on the internet spend this deployment's
+# metered LLM and search API quota from a visitor's browser, with the per-IP rate
+# limit as the only brake.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=settings.cors_origins,
     allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
 
 # ── accounts: auth + saved-plan sync ─────────────────────────────────────────
-
-@app.on_event("startup")
-def _init_accounts_db() -> None:
-    init_db()
-
 
 app.include_router(auth_router)
 app.include_router(plans_router)
@@ -164,14 +268,32 @@ app.include_router(plans_router)
 DEBUG = settings.debug
 
 def _safe_error(exc: Exception, context: str = "") -> str:
-    """Return a safe error message — never leaks internals in production."""
-    logger.error("%s: %s", context, exc, exc_info=True)
+    """Return a safe error message — never leaks internals in production.
+
+    The request_id attached to this line is the same one echoed to the caller in
+    X-Request-ID, so a user reporting "it failed" can be traced to this entry.
+    """
+    logger.error(
+        "handler failed",
+        extra={"context": context or "unknown", "error_type": type(exc).__name__},
+        exc_info=True,
+    )
     if DEBUG:
         return str(exc)
     return "An error occurred. Please try again."
 
 
 # ── helpers ─────────────────────────────────────────────────────────────────
+
+def _safe_filename(title: str, fallback: str = "trip") -> str:
+    """A download name that can't break out of the Content-Disposition header.
+
+    The title is user-supplied, so a quote or CRLF in it would otherwise let the
+    caller terminate the filename early and append headers of their own.
+    """
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", title.strip()).strip("-.")
+    return cleaned.lower()[:40] or fallback
+
 
 def _sse(stream: AsyncIterator[str]) -> StreamingResponse:
     async def _gen():
@@ -180,7 +302,11 @@ def _sse(stream: AsyncIterator[str]) -> StreamingResponse:
                 payload = json.dumps({"content": chunk})
                 yield f"data: {payload}\n\n"
         except Exception as exc:
-            logger.error("streaming endpoint failed: %s", exc, exc_info=True)
+            logger.error(
+            "streaming endpoint failed",
+            extra={"error_type": type(exc).__name__},
+            exc_info=True,
+        )
             payload = json.dumps({"error": "The AI provider is unavailable. Please try again shortly."})
             yield f"data: {payload}\n\n"
         yield "data: [DONE]\n\n"
@@ -207,9 +333,50 @@ async def health():
     }
 
 
+@app.get("/healthz")
+async def liveness():
+    """Liveness: is this process up? No dependencies, so a slow database never
+    causes the orchestrator to kill an otherwise healthy container."""
+    return {"status": "ok", "version": app.version}
+
+
+@app.get("/readyz")
+async def readiness(response: Response):
+    """Readiness: can this process actually serve requests?
+
+    Checks the one dependency that has no fallback — the database. The LLM and
+    search providers are reported for visibility but deliberately do not fail
+    the check, because every route that uses them already degrades gracefully.
+    Returns 503 when unready so load balancers stop sending traffic.
+    """
+    db_ok, db_detail = check_database()
+    checks = {
+        "database": {"ok": db_ok, "detail": db_detail},
+        "llm":      {"ok": settings.has_groq or settings.has_fallback, "required": False},
+        "cache":    {"ok": bool(settings.redis_url), "required": False},
+    }
+    if not db_ok:
+        response.status_code = 503
+    return {"status": "ready" if db_ok else "unready", "version": app.version, "checks": checks}
+
+
+@app.get("/metrics")
+async def metrics_endpoint():
+    """Request rate, error rate and latency percentiles for this process.
+
+    Per-process, so with several workers or instances each reports only its own
+    share. Enough to answer "is it slow / is it erroring" on a single instance;
+    point a real collector at it before relying on it beyond that.
+    """
+    return metrics.snapshot()
+
+
 @app.post("/api/budget")
 @limiter.limit("30/minute")
-async def budget_endpoint(request: Request, body: BudgetInput):
+def budget_endpoint(request: Request, body: BudgetInput):
+    # Deliberately `def`, not `async def`: the body is synchronous CPU work, and on
+    # the event loop it stalls every other request in the process until it returns.
+    # FastAPI runs non-async handlers in a threadpool.
     try:
         return calculate_budget(body)
     except Exception as exc:
@@ -275,7 +442,7 @@ async def places_distances_endpoint(request: Request, body: DistanceMatrixInput)
 
 @app.post("/api/intelligence")
 @limiter.limit("120/minute")
-async def intelligence_endpoint(request: Request, body: IntelligenceRequest):
+def intelligence_endpoint(request: Request, body: IntelligenceRequest):
     try:
         return analyze(body)
     except ValueError as exc:
@@ -287,96 +454,16 @@ async def intelligence_endpoint(request: Request, body: IntelligenceRequest):
 async def forex_endpoint(request: Request, base: str = "INR"):
     """
     Returns live forex rates (INR base).
-    Primary source: orientexchange.in (scraped concurrently per-currency page).
-    Fallback: exchangerate-api.com.
 
     Response format: rates[currency] = how many INR buys 1 unit of that currency
     e.g. rates["USD"] = 96.64  →  1 USD = ₹96.64
     Note: this is INR-per-unit (NOT units-per-INR) — the frontend uses it directly.
     """
-    rates = await _scrape_orient_rates()
-    if rates:
-        return {"base": "INR", "rates": rates, "provider": "orientexchange.in"}
-
-    # ── Fallback: exchangerate-api.com (returns units-per-INR, so we invert) ──
-    fallback_url = "https://api.exchangerate-api.com/v4/latest/INR"
     try:
-        async with httpx.AsyncClient(timeout=8) as client:
-            resp = await client.get(fallback_url)
-            resp.raise_for_status()
-            data = resp.json()
-            raw = data.get("rates", {})
-            wanted = ["USD", "EUR", "GBP", "JPY", "THB", "VND", "MYR",
-                      "SGD", "IDR", "AED", "AUD", "CAD", "CNY", "KRW"]
-            # ExchangeRate-API gives 1 INR = X foreign, so invert to get INR per unit
-            rates_inverted = {
-                k: round(1 / raw[k], 6) for k in wanted if k in raw and raw[k]
-            }
-            return {"base": "INR", "rates": rates_inverted, "provider": "exchangerate-api.com"}
+        result = await fetch_inr_rates(HEADLINE_CURRENCIES)
     except Exception as exc:
         raise HTTPException(status_code=503, detail=_safe_error(exc, "forex"))
-
-
-# ── orientexchange.in scraper ─────────────────────────────────────────────────
-
-_ORIENT_SLUGS: dict[str, str] = {
-    "USD": "inr-usd",
-    "EUR": "inr-eur",
-    "GBP": "inr-gbp",
-    "JPY": "inr-jpy",
-    "SGD": "inr-sgd",
-    "AUD": "inr-aud",
-    "AED": "inr-aed",
-    "CAD": "inr-cad",
-    "THB": "inr-thb",
-    "MYR": "inr-myr",
-    "IDR": "inr-idr",
-    "VND": "inr-vnd",
-}
-
-_ORIENT_HEADERS = {
-    "User-Agent": (
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-        "AppleWebKit/537.36 (KHTML, like Gecko) "
-        "Chrome/124.0.0.0 Safari/537.36"
-    ),
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    "Accept-Language": "en-IN,en;q=0.9",
-}
-
-async def _fetch_orient_one(client: httpx.AsyncClient, currency: str, slug: str) -> tuple[str, float] | None:
-    """Fetch a single currency page and extract its INR rate."""
-    import re as _re
-    url = f"https://www.orientexchange.in/{slug}"
-    try:
-        resp = await client.get(url, headers=_ORIENT_HEADERS, follow_redirects=True, timeout=7)
-        # The page contains text like:  1 VND = 0.00386 INR
-        match = _re.search(
-            rf'1\s+{_re.escape(currency)}\s*=\s*([\d.]+)\s*INR',
-            resp.text, _re.IGNORECASE
-        )
-        if match:
-            return currency, float(match.group(1))
-    except Exception:
-        pass
-    return None
-
-
-async def _scrape_orient_rates() -> dict[str, float] | None:
-    """Scrape all currency pages concurrently. Returns dict of {currency: INR_rate}."""
-    import asyncio
-    async with httpx.AsyncClient() as client:
-        results = await asyncio.gather(
-            *[_fetch_orient_one(client, cur, slug) for cur, slug in _ORIENT_SLUGS.items()],
-            return_exceptions=True,
-        )
-    rates: dict[str, float] = {}
-    for r in results:
-        if isinstance(r, tuple) and r:
-            cur, rate = r
-            rates[cur] = rate
-    # Need at least 6 successful scrapes to be useful
-    return rates if len(rates) >= 6 else None
+    return {"base": "INR", "rates": result.rates, "provider": result.provider}
 
 
 # ── New feature endpoints ─────────────────────────────────────────────────────
@@ -515,16 +602,10 @@ async def visa_check_endpoint(request: Request, body: VisaCheckInput):
 @limiter.limit("60/minute")
 async def currency_convert_endpoint(request: Request, body: ConvertInput):
     """Convert an amount between two currencies using live Orient Exchange rates."""
-    rates = await _scrape_orient_rates() or {}
-    if not rates:
-        # fall back to forex endpoint's inverted rates
-        try:
-            async with httpx.AsyncClient(timeout=8) as client:
-                resp = await client.get("https://api.exchangerate-api.com/v4/latest/INR")
-                raw = resp.json().get("rates", {})
-                rates = {k: round(1 / v, 6) for k, v in raw.items() if v}
-        except Exception:
-            rates = {}
+    try:
+        rates = (await fetch_inr_rates()).rates
+    except Exception:
+        rates = {}
     try:
         return convert_currency(body, rates)
     except ValueError as exc:
@@ -545,7 +626,7 @@ async def extract_costs_endpoint(request: Request, body: ExtractCostsInput):
 
 @app.post("/api/optimize-route")
 @limiter.limit("30/minute")
-async def optimize_route_endpoint(request: Request, body: OptimizeRouteInput):
+def optimize_route_endpoint(request: Request, body: OptimizeRouteInput):
     """Order multi-city stops to minimise total travel distance."""
     try:
         return optimize_route(body)
@@ -592,15 +673,14 @@ async def attraction_price_endpoint(request: Request, body: AttractionPriceInput
 
 @app.post("/api/export/ics")
 @limiter.limit("30/minute")
-async def export_ics_endpoint(request: Request, body: ExportInput):
+def export_ics_endpoint(request: Request, body: ExportInput):
     """Return an iCalendar (.ics) file for the trip events."""
     try:
         ics = build_ics(body)
-        filename = f"{body.title.replace(' ', '-').lower()[:40] or 'trip'}.ics"
         return Response(
             content=ics,
             media_type="text/calendar",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+            headers={"Content-Disposition": f'attachment; filename="{_safe_filename(body.title)}.ics"'},
         )
     except Exception as exc:
         raise HTTPException(status_code=500, detail=_safe_error(exc, "export-ics"))
@@ -618,7 +698,9 @@ async def _wiki_lead_image(query: str) -> str | None:
     q = query.strip().replace(" ", "_")
     if not q:
         return None
-    url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{q}"
+    # quote() with no safe chars: an unescaped title can contain ../ and walk the
+    # request onto a different Wikipedia API path.
+    url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{quote(q, safe='')}"
     try:
         async with httpx.AsyncClient(timeout=8, follow_redirects=True) as client:
             r = await client.get(url, headers={"User-Agent": "Wayfare/2.0 (contact@wayfare.app)"})
@@ -656,7 +738,6 @@ async def city_photo(request: Request, city: str, country: str | None = None):
 
     # Fallback: Unsplash Source URL (deprecated but still redirects to a random photo)
     if not src:
-        from urllib.parse import quote_plus
         src = f"https://source.unsplash.com/1600x900/?{quote_plus(city_norm)},travel,city"
 
     payload = {"city": city_norm, "url": src, "source": "wikipedia" if "wikipedia" in (src or "") or "wikimedia" in (src or "") else "unsplash"}
@@ -667,16 +748,26 @@ async def city_photo(request: Request, city: str, country: str | None = None):
 # ── share a trip (public read-only) ──────────────────────────────────────────
 # Uses Redis for persistence (survives Render restarts) with JSON filesystem fallback.
 import pathlib
-from datetime import datetime, timezone
-from pydantic import BaseModel, Field
+from datetime import UTC, datetime
 
 from agents.cache import search_cache as _share_cache
+from pydantic import BaseModel, Field
 
 _SHARES_DIR = pathlib.Path(__file__).parent / "data"
 _SHARES_DIR.mkdir(parents=True, exist_ok=True)
 _SHARES_FILE = _SHARES_DIR / "shares.json"
 
 _SHARE_TTL = 90 * 24 * 60 * 60  # 90 days in seconds
+_SHARES_LOCK = threading.Lock()
+
+
+def _read_shares_file() -> dict:
+    if not _SHARES_FILE.exists():
+        return {}
+    try:
+        return json.loads(_SHARES_FILE.read_text())
+    except Exception:
+        return {}
 
 
 def _load_shares() -> dict:
@@ -684,13 +775,7 @@ def _load_shares() -> dict:
     # Try Redis
     if hasattr(_share_cache, '_available') and _share_cache._available:
         return {}  # Redis mode — each share is stored individually by key
-    # Fallback — file mode
-    if not _SHARES_FILE.exists():
-        return {}
-    try:
-        return json.loads(_SHARES_FILE.read_text())
-    except Exception:
-        return {}
+    return _read_shares_file()
 
 
 def _save_share(share_id: str, data: dict) -> None:
@@ -703,15 +788,40 @@ def _save_share(share_id: str, data: dict) -> None:
             return
         except Exception:
             pass
-    # Fallback — append to file
+    # Fallback — rewrite the file under a lock. Concurrent writers previously
+    # read-modify-wrote the same dict and silently dropped each other's shares,
+    # and a partial write left unparseable JSON that read back as "no shares".
     try:
-        shares = {}
-        if _SHARES_FILE.exists():
-            shares = json.loads(_SHARES_FILE.read_text())
-        shares[share_id] = data
-        _SHARES_FILE.write_text(json.dumps(shares))
+        with _SHARES_LOCK:
+            shares = _read_shares_file()
+            shares[share_id] = data
+            _prune_expired(shares)
+            tmp = _SHARES_FILE.with_suffix(".json.tmp")
+            tmp.write_text(json.dumps(shares))
+            tmp.replace(_SHARES_FILE)  # atomic on POSIX and Windows
     except Exception as exc:
-        logger.warning("Failed to persist share: %s", exc)
+        logger.warning(
+            "share persistence failed, link will not survive restart",
+            extra={"share_id": share_id, "error_type": type(exc).__name__},
+        )
+
+
+def _prune_expired(shares: dict) -> None:
+    """Drop shares past _SHARE_TTL so the file doesn't grow without bound.
+
+    Redis expires keys on its own; the file fallback never did, so every share
+    ever created stayed on disk and was re-parsed on each read.
+    """
+    cutoff = datetime.now(UTC).timestamp() - _SHARE_TTL
+    for key, entry in list(shares.items()):
+        created = entry.get("created_at") if isinstance(entry, dict) else None
+        if not created:
+            continue
+        try:
+            if datetime.fromisoformat(created).timestamp() < cutoff:
+                del shares[key]
+        except ValueError:
+            continue
 
 
 def _get_share(share_id: str) -> dict | None:
@@ -747,9 +857,9 @@ def _share_author(authorization: str | None) -> str:
     """
     if not authorization or not authorization.lower().startswith("bearer "):
         return ""
+    import models
     from auth_security import decode_token
     from db import SessionLocal
-    import models
 
     user_id = decode_token(authorization.split(" ", 1)[1].strip(), expected_scope="access")
     if user_id is None:
@@ -776,7 +886,7 @@ async def create_share(request: Request, body: ShareInput, authorization: str | 
         "days":     body.days,
         "markdown": body.markdown,
         "author":   _share_author(authorization),
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": datetime.now(UTC).isoformat(),
     }
     _save_share(share_id, share_data)
     return {"id": share_id, "path": f"/share/{share_id}"}

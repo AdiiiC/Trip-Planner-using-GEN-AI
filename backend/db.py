@@ -4,10 +4,9 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterator
 
+from config import settings
 from sqlalchemy import create_engine, func, inspect, select, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
-
-from config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -105,3 +104,17 @@ def get_db() -> Iterator[Session]:
         yield db
     finally:
         db.close()
+
+
+def check_database() -> tuple[bool, str]:
+    """Round-trip a trivial query so readiness reflects the pool, not just the config."""
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return True, "ok"
+    except Exception as exc:
+        logger.warning(
+            "db health check failed",
+            extra={"error_type": type(exc).__name__, "backend": engine.url.get_backend_name()},
+        )
+        return False, type(exc).__name__

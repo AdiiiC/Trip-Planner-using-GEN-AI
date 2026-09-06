@@ -1,7 +1,6 @@
-from langchain_core.messages import AIMessage
 import pytest
-
 from agents import planner
+from langchain_core.messages import AIMessage
 
 
 def test_itinerary_days_accepts_unicode_spaces():

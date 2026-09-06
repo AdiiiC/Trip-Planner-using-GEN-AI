@@ -1,14 +1,13 @@
 """FastAPI dependency that resolves the current user from a Bearer token."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
-from fastapi import Depends, Header, HTTPException, status
-from sqlalchemy.orm import Session
+from datetime import UTC, datetime, timedelta
 
 import models
 from auth_security import decode_token_claims
 from db import get_db
+from fastapi import Depends, Header, HTTPException, status
+from sqlalchemy.orm import Session
 
 _UNAUTHORIZED = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token")
 
@@ -41,5 +40,5 @@ def _predates_password_change(user: models.User, issued_at: datetime) -> bool:
         return False
     if changed_at.tzinfo is None:
         # SQLite hands back naive datetimes; they were written as UTC.
-        changed_at = changed_at.replace(tzinfo=timezone.utc)
+        changed_at = changed_at.replace(tzinfo=UTC)
     return issued_at < changed_at - _SKEW

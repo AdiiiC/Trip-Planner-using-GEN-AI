@@ -3,10 +3,10 @@ Travel insurance estimator — LLM-powered, streaming.
 """
 from __future__ import annotations
 
-from typing import AsyncIterator
+from collections.abc import AsyncIterator
 
-from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel, Field
 
 from agents.llm import astream_with_fallback
 

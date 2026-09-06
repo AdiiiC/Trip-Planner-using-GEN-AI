@@ -3,8 +3,8 @@ Weather forecast — uses wttr.in (no API key required).
 """
 from __future__ import annotations
 
-from pydantic import BaseModel, Field
 import httpx
+from pydantic import BaseModel, Field
 
 
 class WeatherInput(BaseModel):

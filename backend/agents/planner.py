@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-import os
 import re
+from collections.abc import AsyncIterator
 from datetime import date
-from typing import AsyncIterator
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from pydantic import BaseModel, Field, field_validator
 from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel, Field, field_validator
 
 from agents.llm import ainvoke_with_fallback, astream_with_fallback
-
 
 SYSTEM_PROMPT = (
     "You are an expert travel concierge. You create detailed, realistic, time-blocked itineraries. "

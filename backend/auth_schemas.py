@@ -4,7 +4,6 @@ from __future__ import annotations
 from typing import Any
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
-
 from usernames import MAX_LEN as USERNAME_MAX
 
 

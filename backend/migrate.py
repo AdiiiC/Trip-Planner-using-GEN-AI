@@ -10,9 +10,8 @@ from __future__ import annotations
 import logging
 import pathlib
 
-from sqlalchemy import inspect
-
 from db import engine
+from sqlalchemy import inspect
 
 logger = logging.getLogger(__name__)
 

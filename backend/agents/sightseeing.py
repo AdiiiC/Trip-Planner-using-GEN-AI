@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-import re
 
-from pydantic import BaseModel, Field
 from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel, Field
 
-from agents.llm import get_llm
 from agents.geospatial import geocode_attractions
+from agents.llm import get_llm
 
 
 class SightseeingInput(BaseModel):

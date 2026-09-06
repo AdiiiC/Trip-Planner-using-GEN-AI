@@ -1,8 +1,8 @@
 """Backend tests for iter-3 new features: health keys, city-photo, plan streaming."""
 import os
 import time
+
 import requests
-import pytest
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://refined-frontend-2.preview.emergentagent.com").rstrip("/")
 

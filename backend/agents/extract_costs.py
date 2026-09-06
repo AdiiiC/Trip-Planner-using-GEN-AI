@@ -7,10 +7,10 @@ from __future__ import annotations
 import json
 import re
 
+from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
 
 from agents.llm import ainvoke_with_fallback
-from langchain_core.prompts import ChatPromptTemplate
 
 
 class ExtractCostsInput(BaseModel):

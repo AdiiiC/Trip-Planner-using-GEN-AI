@@ -2,11 +2,8 @@
 password reset and email verification."""
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
-
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
-from sqlalchemy import delete, select
-from sqlalchemy.orm import Session
+import secrets
+from datetime import UTC, datetime, timedelta
 
 import models
 import usernames
@@ -46,8 +43,11 @@ from auth_security import (
     verify_totp,
 )
 from db import get_db
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from mailer import build_link, send_email_verification, send_password_reset
 from rate_limit import limiter
+from sqlalchemy import delete, select
+from sqlalchemy.orm import Session
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -65,9 +65,12 @@ _VERIFY_TTL = timedelta(hours=24)
 # Don't let a crowd of IPs mail-bomb one inbox by hammering /password/forgot.
 _RESEND_COOLDOWN = timedelta(minutes=1)
 
+# Verified against on unknown emails so login costs the same either way.
+_DUMMY_HASH = hash_password("not-a-real-password")
+
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def _get_user_by_email(db: Session, email: str) -> models.User | None:
@@ -154,7 +157,13 @@ def set_username(
 @limiter.limit("20/minute")
 def login(request: Request, body: LoginInput, db: Session = Depends(get_db)):
     user = _get_user_by_email(db, body.email)
-    if user is None or not verify_password(body.password, user.password_hash):
+    if user is None:
+        # Hash anyway. Skipping it returns "unknown email" in a few milliseconds
+        # while a real account takes the full Argon2 cost, and that gap alone
+        # tells an attacker which addresses are registered.
+        verify_password(body.password, _DUMMY_HASH)
+        raise _BAD_CREDS
+    if not verify_password(body.password, user.password_hash):
         raise _BAD_CREDS
     if user.is_2fa_enabled:
         return LoginResponse(mfa_required=True, mfa_token=create_mfa_token(user.id))
@@ -228,7 +237,7 @@ def totp_disable(body: CodeInput, user: models.User = Depends(get_current_user),
 def _consume_recovery_code(db: Session, user: models.User, code: str) -> bool:
     target = hash_recovery_code(code)
     for rc in user.recovery_codes:
-        if not rc.used and rc.code_hash == target:
+        if not rc.used and secrets.compare_digest(rc.code_hash, target):
             rc.used = True
             db.commit()
             return True
@@ -399,4 +408,4 @@ def _consume_token(db: Session, raw: str, purpose: str) -> models.AuthToken | No
 
 def _aware(value: datetime) -> datetime:
     """SQLite returns naive datetimes; everything is written as UTC."""
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+    return value if value.tzinfo else value.replace(tzinfo=UTC)

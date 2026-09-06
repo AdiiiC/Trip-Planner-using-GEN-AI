@@ -26,6 +26,8 @@ from tenacity import (
     wait_exponential,
 )
 
+from agents.cache import search_cache
+
 
 def _is_retryable_exa_error(exc: BaseException) -> bool:
     """BUG-008: don't retry rate-limit errors — they won't resolve with a fast retry."""
@@ -38,7 +40,6 @@ def _is_retryable_exa_error(exc: BaseException) -> bool:
         return False
     return True
 
-from agents.cache import search_cache
 
 SERPER_KEY = os.getenv("SERPER_API_KEY", "")
 EXA_KEY    = os.getenv("EXA_API_KEY", "")

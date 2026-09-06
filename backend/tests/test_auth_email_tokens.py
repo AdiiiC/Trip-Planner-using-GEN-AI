@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import jwt
 import pytest
@@ -19,12 +19,12 @@ from sqlalchemy.orm import sessionmaker
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import auth_routes  # noqa: E402
-import models  # noqa: E402
-from auth_routes import router as auth_router  # noqa: E402
-from config import settings  # noqa: E402
-from db import Base, get_db  # noqa: E402
-from rate_limit import limiter  # noqa: E402
+import auth_routes
+import models
+from auth_routes import router as auth_router
+from config import settings
+from db import Base, get_db
+from rate_limit import limiter
 
 PASSWORD = "correct-horse-battery"
 NEW_PASSWORD = "staple-battery-horse"
@@ -106,7 +106,7 @@ def auth(token: str) -> dict[str, str]:
 def backdated_access_token(user_id: int, age: timedelta) -> str:
     """An access token as it would look after a while — i.e. older than the
     clock-skew leeway `get_current_user` allows."""
-    issued = datetime.now(timezone.utc) - age
+    issued = datetime.now(UTC) - age
     return jwt.encode(
         {"sub": str(user_id), "scope": "access", "iat": issued, "exp": issued + timedelta(days=7)},
         settings.jwt_secret,
@@ -151,7 +151,7 @@ def test_reset_rejects_expired_token(client, mailbox, sessions):
 
     with sessions() as db:
         row = db.get(models.AuthToken, newest_token_id(db, email, models.PURPOSE_PASSWORD_RESET))
-        row.expires_at = datetime.now(timezone.utc) - timedelta(minutes=1)
+        row.expires_at = datetime.now(UTC) - timedelta(minutes=1)
         db.commit()
 
     r = client.post("/api/auth/password/reset",
@@ -193,7 +193,7 @@ def test_forgot_replaces_the_previous_link(client, mailbox, sessions):
     # Sidestep the one-minute resend cooldown that guards a single inbox.
     with sessions() as db:
         row = db.get(models.AuthToken, newest_token_id(db, email, models.PURPOSE_PASSWORD_RESET))
-        row.created_at = datetime.now(timezone.utc) - timedelta(minutes=5)
+        row.created_at = datetime.now(UTC) - timedelta(minutes=5)
         db.commit()
 
     client.post("/api/auth/password/forgot", json={"email": email})

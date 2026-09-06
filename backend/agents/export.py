@@ -6,7 +6,7 @@ VCALENDAR that imports into Google/Apple/Outlook calendars.
 """
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from pydantic import BaseModel, Field
 
@@ -27,10 +27,14 @@ class ExportInput(BaseModel):
 
 
 def _esc(text: str) -> str:
+    # ICS properties are CRLF-delimited, so a raw \r or \n in user text would end
+    # the property early and let the rest be read as forged calendar fields.
     return (
         text.replace("\\", "\\\\")
         .replace(";", "\\;")
         .replace(",", "\\,")
+        .replace("\r\n", "\\n")
+        .replace("\r", "\\n")
         .replace("\n", "\\n")
     )
 
@@ -49,7 +53,7 @@ def build_ics(inp: ExportInput) -> str:
         "METHOD:PUBLISH",
         f"X-WR-CALNAME:{_esc(inp.title)}",
     ]
-    stamp = datetime.utcnow().strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
     for idx, ev in enumerate(inp.events):
         try:

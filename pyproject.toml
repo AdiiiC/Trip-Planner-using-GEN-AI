@@ -1,0 +1,94 @@
+[project]
+name = "tripmind-backend"
+version = "2.0.0"
+description = "TripMind — AI-powered trip planner (FastAPI backend)"
+requires-python = ">=3.12"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Ruff — linter *and* formatter. Replaces flake8 + isort + black + pyupgrade.
+#   ruff check --fix .     lint + autofix
+#   ruff format .          format
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.ruff]
+target-version = "py312"
+line-length = 110
+extend-exclude = [".venv", "migrations/versions", "*.ipynb"]
+
+[tool.ruff.lint]
+select = [
+    "E", "W",   # pycodestyle
+    "F",        # pyflakes — unused imports/vars, undefined names
+    "I",        # isort — import ordering
+    "UP",       # pyupgrade — modern syntax for the target version
+    "B",        # flake8-bugbear — likely bugs (mutable defaults, loop closures)
+    "C4",       # flake8-comprehensions
+    "SIM",      # flake8-simplify
+    "RUF",      # ruff-specific rules
+    "S",        # flake8-bandit — security
+    "ASYNC",    # flake8-async — blocking calls inside async def
+]
+ignore = [
+    "E501",     # line length is enforced by the formatter, not the linter
+    "B008",     # FastAPI's Depends()/Query() in defaults is the documented idiom
+    "SIM108",   # ternaries are not always more readable than if/else
+    "SIM103",   # early returns often read better than a single negated expression
+    "RUF001",   # the box-drawing and en-dash characters in comments are deliberate
+    "RUF002",
+    "RUF003",
+]
+
+# ── Adoption backlog ──────────────────────────────────────────────────────────
+# These rules are real, but flag pre-existing code. They are disabled so the gate
+# is green today rather than ignored wholesale. Delete an entry, fix the fallout,
+# and the rule is enforced from then on. Counts are from the commit that added
+# this file.
+[tool.ruff.lint.extend-per-file-ignores]
+"backend/**" = [
+    "B904",      # 21 — `raise ... from exc` inside except; improves Sentry traces
+    "S110",      #  7 — try/except/pass swallows errors silently; log instead
+    "B905",      #  3 — zip() without strict=
+    "ASYNC109",  #  2 — prefer asyncio.timeout() over a timeout parameter
+    "RUF007",    #  2 — itertools.pairwise() over zip(x, x[1:])
+]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/tests/**" = ["S101", "S105", "S106", "RUF059"]  # asserts and fixture creds are the point
+"backend/migrations/**" = ["I001"]      # alembic owns this file layout
+"backend/main.py" = ["E402"]            # load_dotenv() must run before agent imports
+"backend/models.py" = ["S105"]          # PURPOSE_* are token-kind labels, not passwords
+"backend/auth_schemas.py" = ["S105"]    # token_type="bearer" is the OAuth2 literal
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = ["fastapi.Depends", "fastapi.Query", "fastapi.Body", "pydantic.Field"]
+
+[tool.ruff.format]
+quote-style = "double"
+docstring-code-format = true
+
+# ──────────────────────────────────────────────────────────────────────────────
+# pytest — runnable from the repo root (`pytest`) or from backend/ (`pytest tests`)
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["backend/tests"]
+pythonpath = ["backend"]
+asyncio_mode = "auto"
+addopts = "-q --strict-markers"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+# ──────────────────────────────────────────────────────────────────────────────
+# mypy — start permissive, tighten module by module via the overrides below.
+# ──────────────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.12"
+files = ["backend"]
+exclude = ["backend/\\.venv", "backend/migrations"]
+ignore_missing_imports = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+# Pure-logic modules with no third-party surface — safe to hold to a high bar.
+module = ["agents.budget", "agents.route", "agents.currency", "usernames"]
+disallow_untyped_defs = true

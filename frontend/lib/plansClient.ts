@@ -4,12 +4,7 @@
 // without touching sign-in code; both share the bearer token via ./authToken.
 
 import { authHeader } from "./authToken";
-
-const BASE =
-  process.env.NEXT_PUBLIC_API_URL ??
-  (typeof window !== "undefined" && window.location.hostname !== "localhost"
-    ? ""
-    : "http://localhost:8000");
+import { API_BASE_URL as BASE } from "./config";
 
 export interface ServerPlan {
   id: number;

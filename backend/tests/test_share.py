@@ -1,7 +1,8 @@
 """Tests for the new /api/share endpoints and OG image endpoint."""
 import os
-import requests
+
 import pytest
+import requests
 
 BASE_URL = os.environ.get("REACT_APP_BACKEND_URL", "https://refined-frontend-2.preview.emergentagent.com").rstrip("/")
 

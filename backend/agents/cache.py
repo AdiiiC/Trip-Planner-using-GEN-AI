@@ -11,13 +11,13 @@ Free options: Upstash (10k req/day), Redis Cloud free tier (30MB)
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 import time
 from threading import Lock
 from typing import Any
-
 
 # ── In-memory fallback ────────────────────────────────────────────────────────
 
@@ -82,10 +82,8 @@ class RedisCache:
     def set(self, key: str, value: Any) -> None:
         if not self._available:
             return
-        try:
+        with contextlib.suppress(Exception):   # a cache write is never worth failing a request
             self._client.setex(key, self._ttl, json.dumps(value))
-        except Exception:
-            pass
 
     def make_key(self, *parts: str) -> str:
         raw = ":".join(parts)

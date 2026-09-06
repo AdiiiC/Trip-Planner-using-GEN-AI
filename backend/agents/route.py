@@ -32,42 +32,63 @@ def _haversine_km(a: RouteStop, b: RouteStop) -> float:
     return 2 * R * math.asin(math.sqrt(h))
 
 
-def _route_distance(order: list[int], stops: list[RouteStop]) -> float:
-    return sum(_haversine_km(stops[order[i]], stops[order[i + 1]]) for i in range(len(order) - 1))
+def _distance_matrix(stops: list[RouteStop]) -> list[list[float]]:
+    """All pairwise distances, computed once. Symmetric, so only half are derived."""
+    n = len(stops)
+    d = [[0.0] * n for _ in range(n)]
+    for i in range(n):
+        for j in range(i + 1, n):
+            d[i][j] = d[j][i] = _haversine_km(stops[i], stops[j])
+    return d
+
+
+def _route_distance(order: list[int], dist: list[list[float]]) -> float:
+    return sum(dist[order[i]][order[i + 1]] for i in range(len(order) - 1))
 
 
 def optimize_route(inp: OptimizeRouteInput) -> dict:
     stops = inp.stops
     n = len(stops)
+    dist = _distance_matrix(stops)
 
     # ── nearest-neighbour ─────────────────────────────────────────────────────
-    start = 0 if inp.fixed_start else 0
+    # NOTE: `inp.fixed_start` is currently a no-op — both branches of the old
+    # `0 if inp.fixed_start else 0` chose stop 0. Honouring it means trying every
+    # start index and keeping the best tour; until then the first stop always wins.
+    start = 0
     unvisited = set(range(n)) - {start}
     order = [start]
     while unvisited:
         last = order[-1]
-        nxt = min(unvisited, key=lambda j: _haversine_km(stops[last], stops[j]))
+        nxt = min(unvisited, key=lambda j: dist[last][j])
         order.append(nxt)
         unvisited.remove(nxt)
 
     # ── 2-opt improvement ─────────────────────────────────────────────────────
-    improved = True
+    # Reversing order[i:k+1] changes only the two edges at the segment boundaries,
+    # so compare those instead of re-summing the whole route for every candidate.
     lock = 1 if inp.fixed_start else 0
+    improved = True
     while improved:
         improved = False
         for i in range(lock, n - 1):
             for k in range(i + 1, n):
-                new_order = order[:i] + order[i:k + 1][::-1] + order[k + 1:]
-                if _route_distance(new_order, stops) < _route_distance(order, stops):
-                    order = new_order
+                before = (dist[order[i - 1]][order[i]] if i > 0 else 0.0) + (
+                    dist[order[k]][order[k + 1]] if k + 1 < n else 0.0
+                )
+                after = (dist[order[i - 1]][order[k]] if i > 0 else 0.0) + (
+                    dist[order[i]][order[k + 1]] if k + 1 < n else 0.0
+                )
+                if after < before - 1e-9:
+                    order[i:k + 1] = order[i:k + 1][::-1]
                     improved = True
 
-    total = _route_distance(order, stops)
+    total = _route_distance(order, dist)
     legs = [
         {
             "from": stops[order[i]].city,
             "to": stops[order[i + 1]].city,
-            "distance_km": round(_haversine_km(stops[order[i]], stops[order[i + 1]]), 1),
+            "distance_km": round(dist[order[i]][order[i + 1]], 1),
         }
         for i in range(len(order) - 1)
     ]

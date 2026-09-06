@@ -8,13 +8,14 @@ transparently retries on the fallback provider (OpenRouter) when configured.
 from __future__ import annotations
 
 import logging
+import time
 from collections.abc import AsyncIterator
 from typing import Any
 
+from config import settings
 from langchain_core.messages import BaseMessage
 from langchain_groq import ChatGroq
-
-from config import settings
+from observability import metrics
 
 log = logging.getLogger("llm")
 
@@ -86,14 +87,34 @@ async def ainvoke_with_fallback(
 ):
     """Invoke primary LLM; on failure fall back to secondary provider."""
     primary = get_llm(json_mode=json_mode, temperature=temperature, timeout=timeout)
+    started = time.perf_counter()
     try:
-        return await primary.ainvoke(messages)
-    except Exception as exc:  # noqa: BLE001
-        log.warning("Primary LLM failed (%s); trying fallback", exc)
+        result = await primary.ainvoke(messages)
+    except Exception as exc:
+        metrics.incr("llm.primary_failure")
+        log.warning(
+            "primary LLM failed, trying fallback",
+            extra={"provider": "groq", "model": primary_model_name(),
+                   "error_type": type(exc).__name__,
+                   "duration_ms": round((time.perf_counter() - started) * 1000, 1)},
+        )
         fallback = _get_fallback_llm(json_mode=json_mode, temperature=temperature, timeout=timeout)
         if fallback is None:
+            metrics.incr("llm.unavailable")
             raise
-        return await fallback.ainvoke(messages)
+        metrics.incr("llm.fallback_used")
+        result = await fallback.ainvoke(messages)
+        log.info("fallback LLM succeeded", extra={"provider": "openrouter",
+                 "model": settings.fallback_model,
+                 "duration_ms": round((time.perf_counter() - started) * 1000, 1)})
+        return result
+    metrics.incr("llm.primary_success")
+    log.info(
+        "llm invoke",
+        extra={"provider": "groq", "model": primary_model_name(),
+               "duration_ms": round((time.perf_counter() - started) * 1000, 1)},
+    )
+    return result
 
 
 async def astream_with_fallback(
@@ -111,10 +132,18 @@ async def astream_with_fallback(
             if text:
                 emitted = True
                 yield str(text)
+        metrics.incr("llm.primary_success")
         return
-    except Exception as exc:  # noqa: BLE001
-        log.warning("Primary LLM stream failed (%s)", exc)
+    except Exception as exc:
+        metrics.incr("llm.primary_failure")
+        log.warning(
+            "primary LLM stream failed",
+            extra={"provider": "groq", "error_type": type(exc).__name__,
+                   "partial_output": emitted},
+        )
         if emitted:
+            # Mid-stream failure: the client already has half an itinerary, and
+            # restarting on the fallback would duplicate it.
             raise
 
     fallback = _get_fallback_llm(
