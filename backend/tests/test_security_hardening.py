@@ -1,10 +1,12 @@
 """Regressions for the hardening pass: injection escaping, startup guards, health."""
 from __future__ import annotations
 
+import logging
 from unittest.mock import patch
 
 import main
 import pytest
+import rate_limit
 from agents.export import ExportEvent, ExportInput, build_ics
 from config import INSECURE_JWT_SECRET, Settings
 from fastapi.testclient import TestClient
@@ -100,3 +102,44 @@ def test_cors_does_not_allow_arbitrary_origins(client):
 def test_cors_allows_the_local_frontend(client):
     r = client.get("/healthz", headers={"Origin": "http://localhost:3000"})
     assert r.headers.get("access-control-allow-origin") == "http://localhost:3000"
+
+
+# ── rate limiter storage ──────────────────────────────────────────────────────
+# A REDIS_URL set to a bare password crashed the app on boot: `limits` rejected
+# the scheme at import time and took the whole service down with it, quoting the
+# credential in the traceback.
+
+def test_bare_password_redis_url_falls_back_instead_of_crashing(monkeypatch, caplog):
+    monkeypatch.setattr(rate_limit.settings, "redis_url", "A327dtvb0kkqkmgvkgbaq9dd4xsviryq")
+    with caplog.at_level(logging.ERROR, logger="rate_limit"):
+        assert rate_limit._resolve_storage_uri() == "memory://"
+    assert "REDIS_URL" in caplog.text
+
+
+def test_storage_failure_never_logs_the_credential(monkeypatch, caplog):
+    secret = "A327dtvb0kkqkmgvkgbaq9dd4xsviryq"
+    monkeypatch.setattr(rate_limit.settings, "redis_url", secret)
+    with caplog.at_level(logging.ERROR, logger="rate_limit"):
+        rate_limit._resolve_storage_uri()
+    assert secret not in caplog.text
+
+
+def test_well_formed_redis_url_is_used(monkeypatch):
+    monkeypatch.setattr(rate_limit.settings, "redis_url", "redis://:pw@cache:6379/0")
+    assert rate_limit._resolve_storage_uri() == "redis://:pw@cache:6379/0"
+
+
+def test_missing_redis_url_uses_memory(monkeypatch):
+    monkeypatch.setattr(rate_limit.settings, "redis_url", "")
+    assert rate_limit._resolve_storage_uri() == "memory://"
+
+
+def test_unreachable_storage_is_detected_at_startup():
+    """Otherwise every rate-limited route 500s on the first request."""
+    unreachable = rate_limit._build_limiter("redis://localhost:6399/0")
+    assert rate_limit._storage_reachable(unreachable) is False
+    assert rate_limit._storage_reachable(rate_limit._build_limiter("memory://")) is True
+
+
+def test_rate_limited_route_works_with_degraded_storage(client):
+    assert client.get("/api/share/aaaaaaaaaa").status_code == 404

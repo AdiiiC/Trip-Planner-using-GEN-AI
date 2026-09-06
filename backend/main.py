@@ -340,6 +340,17 @@ async def liveness():
     return {"status": "ok", "version": app.version}
 
 
+def _cache_ok() -> bool:
+    """Whether the shared cache is actually usable, not merely configured.
+
+    A REDIS_URL that is set but unreachable reported healthy here, so the one
+    signal that would have shown the cache was dead said everything was fine.
+    """
+    from agents.cache import search_cache
+
+    return getattr(search_cache, "_available", False) if settings.redis_url else False
+
+
 @app.get("/readyz")
 async def readiness(response: Response):
     """Readiness: can this process actually serve requests?
@@ -353,7 +364,7 @@ async def readiness(response: Response):
     checks = {
         "database": {"ok": db_ok, "detail": db_detail},
         "llm":      {"ok": settings.has_groq or settings.has_fallback, "required": False},
-        "cache":    {"ok": bool(settings.redis_url), "required": False},
+        "cache":    {"ok": _cache_ok(), "required": False},
     }
     if not db_ok:
         response.status_code = 503

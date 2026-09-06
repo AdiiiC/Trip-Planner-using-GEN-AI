@@ -14,6 +14,7 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import logging
 import os
 import time
 from threading import Lock
@@ -67,8 +68,14 @@ class RedisCache:
             self._client = _redis.from_url(url, decode_responses=True, socket_timeout=2)
             self._client.ping()
             self._available = True
-        except Exception:
-            pass  # Redis not reachable — TTLCache will be used instead
+        except Exception as exc:
+            # Silence here meant a misconfigured REDIS_URL looked identical to no
+            # cache at all: every search hit the paid API and nothing said why.
+            # The value can be a credential, so log only the failure type.
+            logging.getLogger(__name__).error(
+                "REDIS_URL set but unusable, falling back to in-process cache",
+                extra={"error_type": type(exc).__name__},
+            )
 
     def get(self, key: str) -> Any | None:
         if not self._available:
