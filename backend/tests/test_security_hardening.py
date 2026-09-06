@@ -125,6 +125,14 @@ def test_configured_frontend_origin_passes_preflight():
     assert origin in Settings(ALLOWED_ORIGINS=origin).cors_origins
 
 
+def test_trailing_slash_and_spacing_do_not_silently_break_the_allowlist():
+    origins = Settings(
+        ALLOWED_ORIGINS="https://trip-planner.vercel.app/ , https://staging.vercel.app"
+    ).cors_origins
+    assert "https://trip-planner.vercel.app" in origins
+    assert "https://staging.vercel.app" in origins
+
+
 def test_production_without_allowed_origins_is_reported_at_boot():
     warnings = Settings(ENVIRONMENT="production", JWT_SECRET="x" * 48).browser_access_warnings()
     assert len(warnings) == 1

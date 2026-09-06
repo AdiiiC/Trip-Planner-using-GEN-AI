@@ -91,7 +91,9 @@ class Settings(BaseSettings):
     @property
     def cors_origins(self) -> list[str]:
         base = ["http://localhost:3000", "http://127.0.0.1:3000"]
-        extra = [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+        # An Origin header never carries a trailing slash and matching is exact, so
+        # "https://app.vercel.app/" would be accepted here and then match nothing.
+        extra = [o.strip().rstrip("/") for o in self.allowed_origins.split(",") if o.strip()]
         return base + extra
 
     @property
