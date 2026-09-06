@@ -101,6 +101,10 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # reason is already in the log when someone scales to two and things go odd.
     for constraint in settings.single_instance_constraints():
         logger.warning("single-instance constraint", extra={"constraint": constraint})
+    # Not fatal either: the API still serves non-browser clients. But it means the
+    # frontend is down, so it is louder than a warning.
+    for problem in settings.browser_access_warnings():
+        logger.error("browser access blocked", extra={"problem": problem})
     init_db()
     yield
 

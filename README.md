@@ -322,7 +322,11 @@ npm run format:check        # verify only — what CI runs
 | **Render** (free) | Backend — set Root Directory = `backend`, Start Command = `uvicorn main:app --host 0.0.0.0 --port $PORT` |
 
 **Vercel env vars:** `NEXT_PUBLIC_API_URL=https://your-service.onrender.com`  
-**Render env vars:** all keys from `backend/.env`
+**Render env vars:** all keys from `backend/.env`, plus `ALLOWED_ORIGINS=https://your-app.vercel.app`
+
+> `ALLOWED_ORIGINS` must list the Vercel domain. The API only accepts browser
+> requests from origins named there, and a blocked one surfaces in the browser as
+> an opaque "Load failed" with no matching entry in the backend log.
 
 > Render free tier sleeps after 15 min idle (~30 s cold start). Use [UptimeRobot](https://uptimerobot.com) (free) to keep it awake.
 

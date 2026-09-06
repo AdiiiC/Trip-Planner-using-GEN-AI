@@ -148,6 +148,21 @@ class Settings(BaseSettings):
             )
         return problems
 
+    def browser_access_warnings(self) -> list[str]:
+        """Config that leaves the API usable by curl but not by the frontend.
+
+        A blocked origin is rejected before routing, so there is no status code
+        and no access-log line -- the browser just reports an opaque "Load
+        failed". Nothing else in the system can report this, so boot must.
+        """
+        if not self.is_production or self.allowed_origins.strip():
+            return []
+        return [
+            "ALLOWED_ORIGINS is empty, so the CORS allowlist is localhost only and "
+            "every browser request from the deployed frontend is blocked. Set it to "
+            "the frontend origin, e.g. https://your-app.vercel.app"
+        ]
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -104,6 +104,47 @@ def test_cors_allows_the_local_frontend(client):
     assert r.headers.get("access-control-allow-origin") == "http://localhost:3000"
 
 
+# A deploy with ALLOWED_ORIGINS unset answered every frontend preflight with a
+# bare 400 and no allow-origin header, so login failed in the browser with only
+# "Load failed" to go on -- no status, no log line, nothing to search for.
+
+def test_preflight_from_an_unlisted_origin_is_rejected(client):
+    r = client.options(
+        "/api/auth/login",
+        headers={
+            "Origin": "https://trip-planner.vercel.app",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert r.headers.get("access-control-allow-origin") is None
+
+
+def test_configured_frontend_origin_passes_preflight():
+    origin = "https://trip-planner.vercel.app"
+    assert origin in Settings(ALLOWED_ORIGINS=origin).cors_origins
+
+
+def test_production_without_allowed_origins_is_reported_at_boot():
+    warnings = Settings(ENVIRONMENT="production", JWT_SECRET="x" * 48).browser_access_warnings()
+    assert len(warnings) == 1
+    assert "ALLOWED_ORIGINS" in warnings[0]
+
+
+def test_production_with_allowed_origins_is_quiet():
+    s = Settings(
+        ENVIRONMENT="production",
+        JWT_SECRET="x" * 48,
+        ALLOWED_ORIGINS="https://trip-planner.vercel.app",
+    )
+    assert s.browser_access_warnings() == []
+
+
+def test_missing_allowed_origins_never_blocks_startup():
+    """An unreachable frontend must not become an unstartable backend."""
+    assert Settings(ENVIRONMENT="production", JWT_SECRET="x" * 48).insecure_settings() == []
+
+
 # ── rate limiter storage ──────────────────────────────────────────────────────
 # A REDIS_URL set to a bare password crashed the app on boot: `limits` rejected
 # the scheme at import time and took the whole service down with it, quoting the
