@@ -6,12 +6,17 @@
  * Nothing secret belongs in this file: it is bundled into the browser.
  */
 
-/** Backend origin. Empty string means "same origin" (self-hosted behind one domain). */
-export const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL ??
-  (typeof window !== "undefined" && window.location.hostname !== "localhost"
-    ? ""
-    : "http://localhost:8000");
+/**
+ * Backend origin.
+ *
+ * Empty in the browser: requests go to /api on this domain and the Next rewrite
+ * (see next.config.ts) forwards them to FastAPI, so they are same-origin and
+ * CORS never applies. Server components must stay absolute -- Node's fetch
+ * cannot resolve a relative URL and throws on one.
+ */
+const BACKEND_ORIGIN = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+
+export const API_BASE_URL = typeof window === "undefined" ? BACKEND_ORIGIN : "";
 
 /** Third-party endpoints called directly from the browser. */
 export const EXTERNAL_ENDPOINTS = {

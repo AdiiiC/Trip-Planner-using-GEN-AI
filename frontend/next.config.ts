@@ -6,6 +6,10 @@ import { fileURLToPath } from "node:url";
 const isDev = process.env.NODE_ENV !== "production";
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
+// Where FastAPI actually lives. Only this file and server-side fetches use it
+// directly; the browser goes through the /api rewrite below.
+const backendOrigin = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000").replace(/\/$/, "");
+
 // Content Security Policy — strict in prod, relaxed for dev (Turbopack HMR, cross-origin preview)
 // PostHog serves its config and extension scripts from a different host than the
 // one events are sent to, so us-assets belongs in script-src as well as connect-src.
@@ -74,6 +78,13 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "source.unsplash.com" },
       { protocol: "https", hostname: "images.unsplash.com" },
     ],
+  },
+  // The browser calls /api on this domain and Next forwards it to FastAPI, so
+  // requests are same-origin and CORS never applies. Without this the backend
+  // must name the exact Vercel domain in ALLOWED_ORIGINS, and when it doesn't
+  // the only symptom is an opaque "Load failed" in the browser.
+  async rewrites() {
+    return [{ source: "/api/:path*", destination: `${backendOrigin}/api/:path*` }];
   },
   async headers() {
     return [
