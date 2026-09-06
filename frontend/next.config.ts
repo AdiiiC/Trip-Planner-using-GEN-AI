@@ -7,12 +7,14 @@ const isDev = process.env.NODE_ENV !== "production";
 const projectRoot = path.dirname(fileURLToPath(import.meta.url));
 
 // Content Security Policy — strict in prod, relaxed for dev (Turbopack HMR, cross-origin preview)
+// PostHog serves its config and extension scripts from a different host than the
+// one events are sent to, so us-assets belongs in script-src as well as connect-src.
 const prodCsp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://us-assets.i.posthog.com",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://upload.wikimedia.org https://commons.wikimedia.org https://logo.clearbit.com https://images.unsplash.com https://source.unsplash.com",
-  "connect-src 'self' data: https://*.onrender.com https://*.sentry.io https://wft-geo-db.p.rapidapi.com https://photon.komoot.io https://en.wikipedia.org https://app.posthog.com https://us.i.posthog.com",
+  "connect-src 'self' data: https://*.onrender.com https://*.sentry.io https://wft-geo-db.p.rapidapi.com https://photon.komoot.io https://en.wikipedia.org https://app.posthog.com https://us.i.posthog.com https://us-assets.i.posthog.com",
   "font-src 'self' data:",
   "frame-src 'none'",
   "object-src 'none'",
