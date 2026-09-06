@@ -2,21 +2,14 @@
 from __future__ import annotations
 
 import os
-import pathlib
-import tempfile
 
-# Without Redis the share store falls back to a JSON file in the repo.
+# Without Redis the share store falls back to a JSON file; conftest redirects it.
 os.environ.setdefault("REDIS_URL", "")
 
-import main
 import pytest
 from db import init_db
 from fastapi.testclient import TestClient
 from main import app
-
-# Send those writes to a scratch file instead.
-main._SHARES_FILE = pathlib.Path(tempfile.gettempdir()) / "test_shares.json"
-main._SHARES_FILE.unlink(missing_ok=True)
 
 # TestClient only fires startup events inside a context manager, so migrate here.
 init_db()
